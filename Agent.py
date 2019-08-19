@@ -562,9 +562,9 @@ class AdHocLearningAgent(Agent):
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dqn_net = AdHocWolfpackGNN(3, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = True).to(self.device)
+                                        10, 7, with_rfm = False).to(self.device)
         self.target_dqn_net = AdHocWolfpackGNN(3, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = True).to(self.device)
+                                        10, 7, with_rfm = False).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
         self.mode = mode
 
@@ -887,9 +887,9 @@ class AdHocShortBPTTAgent(Agent):
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dqn_net = AdHocWolfpackGNN(3, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = True).to(self.device)
+                                        10, 7, with_rfm = False).to(self.device)
         self.target_dqn_net = AdHocWolfpackGNN(3, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = True).to(self.device)
+                                        10, 7, with_rfm = False).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
         self.mode = mode
 

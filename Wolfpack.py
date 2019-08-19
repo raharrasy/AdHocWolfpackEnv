@@ -1,16 +1,12 @@
-import random
+
 import copy
 from random import sample
-import numpy as np
 import pickle as pkl
 import argparse
-import time
 import torch
-import numpy as np
 from Agent import *
 import pygame
-from misc import *
-import pickle
+import ray
 from QNetwork import *
 
 # import ray
@@ -781,7 +777,7 @@ class Wolfpack(object):
 #def get_food(food, obs):
 #    return food.act(obs)
 
-#@ray.remote
+@ray.remote
 class AdHocWolfpack(Wolfpack):
     def __init__(self, grid_height, grid_width, agent, args= None, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
@@ -915,12 +911,12 @@ args = parser.parse_args()
 
 def create_parallel_env(args, player, num_envs):
     schedulers = [OpenScheduler(4, args['add_rate'], args['del_rate']) for _ in range(num_envs)]
-    envs = [AdHocWolfpack(25, 25, agent=player, args=args,
+    envs = [AdHocWolfpack.remote(25, 25, agent=player, args=args,
                             num_players=args['num_predators'], max_food_num=args['num_food'],
                             max_time_steps=args['episode_length'], scheduler=scheduler) for scheduler
                      in schedulers]
     for env in envs:
-        env.load_map('level_1.pkl')
+        env.load_map.remote('level_1.pkl')
 
     return envs
 
@@ -938,7 +934,7 @@ if __name__ == '__main__':
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
 
-    #ray.init(object_store_memory=int(1e9))
+    ray.init(object_store_memory=int(1e9))
     envs = create_parallel_env(vars(args), player, arguments['num_envs'])
     # Setup
 
@@ -948,14 +944,14 @@ if __name__ == '__main__':
     for eps_index in range(num_episodes):
         start = timeit.default_timer()
         num_timesteps = 0
-        #env_obs = ray.get([env.reset.remote() for env in envs])
-        env_obs = [env.reset() for env in envs]
+        env_obs = ray.get([env.reset.remote() for env in envs])
+        #env_obs = [env.reset() for env in envs]
         player.reset(env_obs)
         done = False
         while not done:
             player_acts = player.step(env_obs)
-            #player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
-            player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
+            player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
+            #player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
             dones = [obs[2] for obs in player_obs]
