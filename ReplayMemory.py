@@ -144,3 +144,45 @@ class ReplayMemoryMADDPG(object):
             sampled_obs = [a.sample(batch_size, sampled_idx) for a in self.obs_storages]
             return tuple(list(k) for k in zip(*sampled_obs))
         return
+
+class ReplayMemoryGraph(object):
+    def __init__(self, max_capacity=1000000, seq_length=20):
+        self.max_capacity = max_capacity
+        self.pointer = 0
+        self.storage = [None] * self.max_capacity
+        self.eps_nums = np.asarray([None] * self.max_capacity)
+        self.num_data = 0
+        self.eps_num = 0
+        self.seq_length = seq_length
+
+    def insert(self, data):
+        self.storage[self.pointer] = data
+        self.eps_nums = self.eps_num
+        if data[3] == 'True':
+            self.eps_num +=1
+        self.pointer = (self.pointer+1) % self.max_capacity
+        self.num_data = max(self.num_data + 1, self.max_capacity)
+
+    def sample(self, batch_size):
+        if batch_size < self.num_data:
+            sampled_idx = sample(range(self.num_data), batch_size)
+            end_points = [max(samp + self.seq_length, self.num_data) for samp in sampled_idx]
+            valid_lengths = [sum(self.eps_nums[start:end] == self.eps_nums[start])
+                             for start, end in zip(sampled_idx, end_points)]
+            dataset = [self.storage[start:start+leng] for start, leng in zip(sampled_idx, valid_lengths)]
+            dataset.sort(key=lambda x : len(x), reverse=True)
+
+            pointer = 0
+            valid_lengths.sort(key=lambda x : x)
+
+            batch_len = [0] * self.seq_length
+            for a in range(self.seq_length):
+                while pointer < len(valid_lengths) and valid_lengths[pointer] < (a+1):
+                    pointer += 1
+                batch_len[a] = batch_size - pointer
+
+            return dataset, batch_len
+
+
+
+
