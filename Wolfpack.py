@@ -5,14 +5,14 @@ import pickle as pkl
 import argparse
 import torch
 from Agent import *
-import pygame
+#import pygame
 import ray
 from QNetwork import *
 
 # import ray
-import multiprocessing as mp
+#import multiprocessing as mp
 import timeit
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 
 class Generator(object):
@@ -694,7 +694,9 @@ class Wolfpack(object):
 
             pos_list = [list(pos_data) for pos_data in positions]
             for pos, ord in zip(pos_list, orientation):
-                pos.append(ord)
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
 
             prob_state = np.asarray(self.RGB_grid)
 
@@ -889,19 +891,19 @@ parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experi
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
 parser.add_argument('--max_bptt_length', type=int, default=20, help="length of state sequence")
-parser.add_argument('--num_episodes', type=int, default=50, help="Number of episodes for training")
+parser.add_argument('--num_episodes', type=int, default=2500, help="Number of episodes for training")
 parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--anneal_end', type=int, default=4000, help="Number of episodes until linear annealing stops")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
-parser.add_argument('--saving_frequency', type=int,default=500,help="saving frequency")
+parser.add_argument('--saving_frequency', type=int,default=100,help="saving frequency")
 parser.add_argument('--obs_height', type=int,default=9,help="observation_height")
 parser.add_argument('--obs_width', type=int,default=17,help="observation_width")
 parser.add_argument('--obs_type', type=str,default="partial_obs",help="observation type")
 parser.add_argument('--with_gpu', type=bool,default=False,help="with gpu")
 parser.add_argument('--add_rate', type=float,default=0.05,help="agent added rate")
 parser.add_argument('--del_rate', type=float,default=0.05,help="agent deletion rate")
-parser.add_argument('--num_envs', type=int,default=8, help="Number of environments")
+parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
 parser.add_argument('--max_seq_length', type=int, default=5, help="length of state sequence")
 parser.add_argument('--maddpg_max_seq_length', type=int, default=10, help="length of state sequence")
@@ -921,9 +923,6 @@ def create_parallel_env(args, player, num_envs):
     return envs
 
 if __name__ == '__main__':
-    num_players = 4
-    num_food = 2
-
     add_rate = 0.05
     rem_rate = 0.05
 
@@ -964,6 +963,8 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", end-start)
+        if (eps_index+1)%arguments['saving_frequency'] == 0:
+            player.save_parameters("parameters/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
 
 
