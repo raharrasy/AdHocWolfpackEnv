@@ -596,7 +596,11 @@ class AdHocLearningAgent(Agent):
         self.pred_val_pointer = None
         self.target_vals = None
 
+        self.epsilon = epsilon
         self.loss_module = nn.MSELoss()
+
+    def set_epsilon(self, eps):
+        self.epsilon = eps
 
     def step(self, obs):
         if self.next_obs is None:
@@ -652,7 +656,7 @@ class AdHocLearningAgent(Agent):
 
         act = torch.argmax(out, dim=-1)
         self.predicted_vals.append(out.gather(1, act[:,None]))
-        act = [a.item() for a in act]
+        act = [a.item() if random.random() > self.epsilon else random.randint(0,6) for a in act]
 
         return act
 
@@ -873,7 +877,7 @@ class AdHocLearningAgent(Agent):
 
 class AdHocShortBPTTAgent(Agent):
     def __init__(self, agent_id=0, args=None, obs_type="adhoc_obs", rollout_freq=8, back_prop_len=12, optimizer=None,
-                 mode="train", device=None):
+                 mode="train", device=None, epsilon=1.0):
         super(AdHocShortBPTTAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
         self.args = args
 
@@ -917,6 +921,7 @@ class AdHocShortBPTTAgent(Agent):
         self.predicted_vals = None
         self.pred_val_pointer = None
         self.target_vals = None
+        self.epsilon = epsilon
 
         self.loss_module = nn.MSELoss()
 
@@ -957,7 +962,7 @@ class AdHocShortBPTTAgent(Agent):
 
         act = torch.argmax(out, dim=-1)
         self.predicted_vals.append(out.gather(1, act[:,None]))
-        act = [a.item() for a in act]
+        act = [a.item() if random.random() > self.epsilon else random.randint(0,6) for a in act]
 
         return act
 
@@ -1080,7 +1085,8 @@ class AdHocShortBPTTAgent(Agent):
 
     def save_parameters(self, filename):
         torch.save(self.dqn_net.state_dict(), filename)
-
+    def set_epsilon(self, eps):
+        self.epsilon = eps
     def create_input_graph(self, node_filters, num_added_nodes, idx=0):
         device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda:0')
         new_graph = dgl.DGLGraph()

@@ -925,7 +925,7 @@ def create_parallel_env(args, player, num_envs):
 if __name__ == '__main__':
     add_rate = 0.05
     rem_rate = 0.05
-
+    torch.set_num_threads(1)
     arguments = vars(args)
 
     player = AdHocShortBPTTAgent(args=arguments, agent_id=0)
@@ -944,7 +944,6 @@ if __name__ == '__main__':
         start = timeit.default_timer()
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
-        print(env_obs[0])
         #env_obs = [env.reset() for env in envs]
         player.reset(env_obs)
         done = False
@@ -964,6 +963,7 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", end-start)
+        player.set_epsilon(max(1.0-((eps_index+1.0)/1250.0), 0.05))
         if (eps_index+1)%arguments['saving_frequency'] == 0:
             player.save_parameters("parameters/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
