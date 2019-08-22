@@ -694,7 +694,9 @@ class Wolfpack(object):
 
             pos_list = [list(pos_data) for pos_data in positions]
             for pos, ord in zip(pos_list, orientation):
-                pos.append(ord)
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
 
             prob_state = np.asarray(self.RGB_grid)
 
@@ -889,7 +891,7 @@ parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experi
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
 parser.add_argument('--max_bptt_length', type=int, default=20, help="length of state sequence")
-parser.add_argument('--num_episodes', type=int, default=50, help="Number of episodes for training")
+parser.add_argument('--num_episodes', type=int, default=2500, help="Number of episodes for training")
 parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--anneal_end', type=int, default=4000, help="Number of episodes until linear annealing stops")
@@ -921,9 +923,6 @@ def create_parallel_env(args, player, num_envs):
     return envs
 
 if __name__ == '__main__':
-    num_players = 4
-    num_food = 2
-
     add_rate = 0.05
     rem_rate = 0.05
 
