@@ -944,6 +944,7 @@ if __name__ == '__main__':
         start = timeit.default_timer()
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
+        print(env_obs[0])
         #env_obs = [env.reset() for env in envs]
         player.reset(env_obs)
         done = False
