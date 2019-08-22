@@ -267,17 +267,16 @@ class TeammateAwarePredator(Agent):
 
         adders = [(0, 1), (0, -1), (1, 0), (-1, 0)]
         border_points = [[((point[0] + adder[0], point[1] + adder[1]), point) for adder in adders
-                          if (point[0] + adder[0], point[1] + adder[1]) in poss_locs and
-                          (point[0] + adder[0], point[1] + adder[1]) not in all_agent_pos] for point in oppo_pos]
+                          if (point[0] + adder[0], point[1] + adder[1]) in poss_locs] for point in oppo_pos]
         collapsed_border = [point for elem in border_points for point in elem]
         manhattan_dists = [list(zip(collapsed_border,
                                     [self.computeManhattanDistance(agent, elem_border[0]) for elem_border in
                                      collapsed_border]))
                            for agent in all_agent_pos]
 
-        max_manhattan_dists = [max(k) for k in manhattan_dists]
+        max_manhattan_dists = [max([elem[1] for elem in k]) for k in manhattan_dists]
         enumerated_man_dist = list(enumerate(max_manhattan_dists))
-        enumerated_man_dist.sort(key=(lambda x: x[1]), reverse=True)
+        enumerated_man_dist.sort(key=(lambda x: x[1]))
 
         for a in manhattan_dists:
             a.sort(key=(lambda x: x[1]))
@@ -308,27 +307,25 @@ class TeammateAwarePredator(Agent):
         y_del = point1[0] - point2[0]
         x_del = point1[1] - point2[1]
 
-        compass_dir = -1
-        if x_del == 1:
-            compass_dir = 3
-        elif x_del == -1:
-            compass_dir = 1
-        elif y_del == -1:
-            compass_dir = 2
-        elif y_del == 1:
-            compass_dir = 0
+        if agent_pos == single_dest :
+            compass_dir = -1
+            if x_del == 1:
+                compass_dir = 3
+            elif x_del == -1:
+                compass_dir = 1
+            elif y_del == -1:
+                compass_dir = 2
+            elif y_del == 1:
+                compass_dir = 0
 
-        if compass_dir != -1:
-            real_dir = (compass_dir - agent_orientation) % 4
-            return real_dir
+            if compass_dir != -1:
+                real_dir = (compass_dir - agent_orientation) % 4
+                return real_dir
 
         next_dest = None
         start = agent_pos
-        if single_dest != 0:
-            end = single_dest
-            next_dest = self.a_star(start, end, poss_locs, all_agent_pos, oppo_pos)
-        else:
-            return random.randint(0, 6)
+        end = single_dest
+        next_dest = self.a_star(start, end, poss_locs, all_agent_pos, oppo_pos)
 
         if next_dest == None:
             return random.randint(0, 6)
@@ -357,7 +354,6 @@ class TeammateAwarePredator(Agent):
         cost_so_far[start] = 0
 
         adders = [(0, -1), (0, 1), (1, 0), (-1, 0)]
-        idx = 0
         while not frontier.empty():
             current = frontier.get()
             if current == end:
@@ -533,7 +529,7 @@ class MADDPGAgent(Agent):
     def save_parameters(self, filename):
         torch.save(self.dqn_net.state_dict(), filename)
 
-    def act(self, obs,added_features=None, mode="train", epsilon=0.01):
+    def act(self, obs, epsilon=0.01):
         self.recent_obs_storage = np.roll(self.recent_obs_storage, axis=0, shift=-1)
         self.added_obs_storage = np.roll(self.added_obs_storage, axis=0, shift=-1)
         self.recent_obs_storage[-1] = obs[0]
