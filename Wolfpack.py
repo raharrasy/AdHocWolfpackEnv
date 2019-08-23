@@ -226,6 +226,7 @@ class Wolfpack(object):
         self.food_points = None
         self.a_to_idx = None
         self.idx_to_a = None
+        self.prev_dist_to_food = None
 
         self.player_obs_type = []
         self.food_obs_type = []
@@ -295,6 +296,8 @@ class Wolfpack(object):
             self.RGB_grid[coord[0]][coord[1]] = [255, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 0, 0]
 
+        self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in self.player_positions]
         self.remaining_timesteps = self.max_time_steps
 
         return [self.observation_computation(obs_type, agent_id=id) for id, obs_type in
@@ -453,7 +456,13 @@ class Wolfpack(object):
         player_locations = self.player_positions
         set_of_food_location = set(food_locations)
 
-        self.player_points = [0 for a in range(self.num_players)]
+        cur_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in food_locations])
+                                  for (px, py) in self.player_positions]
+
+        self.player_points = [0.05 * (prev_dist-cur_dist) for prev_dist, cur_dist in
+                              zip(self.prev_dist_to_food, cur_dist_to_food)]
+        self.prev_dist_to_food = cur_dist_to_food
+
         self.food_points = [0 for a in range(self.max_food_num)]
 
         for player_loc in player_locations:
@@ -711,11 +720,15 @@ class Wolfpack(object):
         pos_idxes = random.sample(list(range(len(available_pos))), k=len(new_agent))
         added_pos = [available_pos[a] for a in pos_idxes]
         orientation = [def_orientation for _ in range(len(added_pos))]
+        added_cur_dis = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in added_pos]
 
         self.player_orientation.extend(orientation)
         self.player_positions.extend(added_pos)
         self.player_obs_type.extend(new_types)
         self.agent_list.extend(new_agent)
+        self.prev_dist_to_food.extend(added_cur_dis)
+
         for a in added_pos:
             self.grid[a[0]][a[1]] = 2
             self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
@@ -733,6 +746,7 @@ class Wolfpack(object):
             self.agent_list.pop(idx)
             self.player_orientation.pop(idx)
             self.player_obs_type.pop(idx)
+            self.prev_dist_to_food.pop(idx)
             self.num_players -= 1
 
     def step(self, hunter_collective_action, food_collective_action):
@@ -965,7 +979,7 @@ if __name__ == '__main__':
         print("Eps Done!!! Took these seconds : ", end-start)
         player.set_epsilon(max(1.0-((eps_index+1.0)/1250.0), 0.05))
         if (eps_index+1)%arguments['saving_frequency'] == 0:
-            player.save_parameters("parameters/params_"+str((eps_index+1)//arguments['saving_frequency']))
+            player.save_parameters("parameters_dense/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
 
 
