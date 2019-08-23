@@ -2,7 +2,7 @@ import random
 import math
 import sys
 import queue as Q
-from ReplayMemory import ReplayMemoryLite, ReplayMemory
+from ReplayMemory import ReplayMemoryLite, ReplayMemoryGraph
 from QNetwork import DQN, AdHocWolfpackGNN, GraphOppoModel, MADDPGDQN
 from misc import hard_copy, soft_copy
 from MADDPGMisc import gumbel_softmax
@@ -12,6 +12,7 @@ import torch.optim as optim
 import dgl
 import numpy as np
 import torch.distributions as dist
+import timeit
 #import ray
 
 
@@ -548,7 +549,7 @@ class MADDPGAgent(Agent):
 
 class AdHocLearningAgent(Agent):
     def __init__(self, agent_id=0, args=None, obs_type="adhoc_obs", rollout_freq=8, back_prop_len=12, optimizer=None,
-                 mode="train", device=None):
+                 mode="train", device=None, epsilon = 1.0):
         super(AdHocLearningAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
         self.args = args
 
@@ -1145,3 +1146,268 @@ class AdHocShortBPTTAgent(Agent):
         self.curr_hidden = ((self.curr_hidden[0][0].detach(), self.curr_hidden[0][1].detach()),
                             (self.curr_hidden[1][0].detach(), self.curr_hidden[1][1].detach()),
                             (self.curr_hidden[2][0].detach(), self.curr_hidden[2][1].detach()))
+
+class AdHocDQNAgent(Agent):
+    def __init__(self, agent_id=0, args=None, obs_type="adhoc_obs", rollout_freq=8, optimizer=None,
+                 mode="train", device=None, epsilon=1.0):
+
+        super(AdHocDQNAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
+        self.args = args
+
+        # Initialize neural network dimensions
+        self.dim_lstm_out = 10
+        self.device = device
+        if self.device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
+                                        10, 7, with_rfm=False).to(self.device)
+        self.target_dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
+                                               10, 7, with_rfm=False).to(self.device)
+        hard_copy(self.target_dqn_net, self.dqn_net)
+        self.mode = mode
+
+        # Initialize hidden states of prediction
+        self.hidden_edge = [None]
+        self.hidden_node = [None]
+        self.hidden_u = [None]
+
+        self.optimizer = optimizer
+        if self.optimizer is None:
+            self.optimizer = optim.Adam(self.dqn_net.parameters(), lr=self.args['lr'])
+        self.prev_hidden = None
+        self.curr_hidden = None
+
+        # Set params for step
+        self.graph = [None]
+        self.train_graph = None
+        self.next_graph = [None]
+        self.obs = None
+        self.next_obs = None
+        self.epsilon = epsilon
+        self.hidden_train_u = None
+
+        self.loss_module = nn.MSELoss()
+        self.replay_memory = ReplayMemoryGraph(seq_length=self.args['max_seq_length'])
+
+    def set_epsilon(self, epsilon):
+        self.epsilon = epsilon
+
+    def step(self, obs):
+        if self.next_obs is None:
+            outs = self.prep_obs(obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+            prepped_obs = outs
+            self.graph = outs[0]
+
+        else:
+            self.graph, prepped_obs = self.next_graph, self.next_obs
+
+        self.obs = prepped_obs
+
+        if self.prev_hidden is None:
+            self.curr_hidden = (self.obs[4], self.obs[5], self.obs[6])
+
+        batch_graph = dgl.batch(self.obs[0])
+        out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
+                                                        self.curr_hidden[0], self.curr_hidden[1],
+                                                self.curr_hidden[2])
+
+        self.hidden_edge = e_hid
+        self.hidden_node = n_hid
+        self.hidden_u = list(zip([hid[None,None,:] for hid in u_hid[0][0]], [hid[None,None,:] for hid in u_hid[1][0]]))
+
+        act = torch.argmax(out, dim=-1)[0].item() if random.random() > self.epsilon else random.randint(0,6)
+
+        return act
+
+    def set_next_state(self, cur_obs, actions, rewards, dones, next_obs):
+        # Set all necessary data for next forward computation
+        self.next_obs = self.prep_obs(next_obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+        self.next_graph = self.next_obs[0]
+        self.prev_hidden = self.curr_hidden
+
+        self.replay_memory.insert((cur_obs[0], actions, rewards, dones, next_obs[0]))
+        self.curr_hidden = (self.next_obs[4], self.next_obs[5], self.next_obs[6])
+
+
+    def prep_obs(self, obses, prev_hidden_e, prev_hidden_n, prev_hidden_u, mode="run"):
+        # All the list used for creating batches
+        new_graphs = []
+        edge_feature_list = []
+        node_feature_list = []
+        u_feature_list = []
+        prep_hidden_e_list = []
+        prep_hidden_n_list = []
+
+        for idx, obs in enumerate(obses):
+            if prev_hidden_e[idx] is None:
+                prev_hidden_e[idx] = (torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 10]).to(self.device),
+                                         torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 10]).to(self.device))
+            if prev_hidden_n[idx] is None:
+                prev_hidden_n[idx] = (torch.zeros([1, len(obs[2]), 10]).to(self.device),
+                                      torch.zeros([1, len(obs[2]), 10]).to(self.device))
+            if prev_hidden_u[idx] is None:
+                prev_hidden_u[idx] = (torch.zeros([1, 1, 10]).to(self.device),
+                                      torch.zeros([1, 1, 10]).to(self.device))
+
+            new_graph, edge_filters = self.create_input_graph(obs[2], obs[3], idx, mode=mode)
+            new_graphs.append(new_graph)
+
+            # Calculate number of added nodes and new number of nodes
+            added_n, new_node_num = obs[3], new_graph.nodes().shape[0]
+            # Calculate number of nodes after filtering
+            after_delete_node = new_node_num - added_n
+            # Calculate the added number of edges
+            added_e = (new_node_num * (new_node_num - 1)) - (after_delete_node * (after_delete_node - 1))
+
+            # Prepare hiddens
+
+            # Empty features for edge
+            edge_features = torch.Tensor(size=[new_node_num * (new_node_num - 1), 0]).to(self.device)
+            edge_feature_list.append(edge_features)
+            # Features for nodes
+            node_features = torch.Tensor(obs[0]).to(self.device)
+            node_feature_list.append(node_features)
+            # Use image as features for graph
+            u_features = torch.Tensor(obs[1]).permute(2, 0, 1)[None, :, :, :].to(self.device)
+            u_feature_list.append(u_features)
+
+            preprocessed_hidden_e = self.prep_hidden(prev_hidden_e[idx], [edge_filters], [added_e])
+            prep_hidden_e_list.append(preprocessed_hidden_e)
+            preprocessed_hidden_n = self.prep_hidden(prev_hidden_n[idx], [torch.Tensor(obs[2]).to(self.device)],
+                                                     [added_n])
+            prep_hidden_n_list.append(preprocessed_hidden_n)
+
+        e_feat, n_feat, u_feat = torch.cat(edge_feature_list, dim=0), \
+                                 torch.cat(node_feature_list, dim=0), \
+                                 torch.cat(u_feature_list, dim=0)
+
+        hid_1_e, hid_2_e = zip(*prep_hidden_e_list)
+        hid_e = (torch.cat(hid_1_e, dim=1), torch.cat(hid_2_e, dim=1))
+
+        hid_1_n, hid_2_n = zip(*prep_hidden_n_list)
+        hid_n = (torch.cat(hid_1_n, dim=1), torch.cat(hid_2_n, dim=1))
+
+        hid_1_u, hid_2_u = zip(*prev_hidden_u)
+        hid_u = (torch.cat(hid_1_u, dim=1), torch.cat(hid_2_u, dim=1))
+
+
+        return new_graphs, e_feat, n_feat, u_feat,\
+               hid_e, hid_n, hid_u
+
+    def reset(self, obs):
+        self.hidden_edge = [None]
+        self.hidden_node = [None]
+        self.hidden_u = [None]
+        self.graph = [None]
+        self.next_graph = [None]
+        self.obs = None
+        self.next_obs = None
+
+        self.prev_hidden = None
+        self.curr_hidden = None
+
+    def load_parameters(self, filename):
+        self.dqn_net.load_state_dict(torch.load(filename))
+        self.dqn_net.eval()
+
+    def save_parameters(self, filename):
+        torch.save(self.dqn_net.state_dict(), filename)
+
+    def create_input_graph(self, node_filters, num_added_nodes, idx=0, mode="run"):
+        device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda:0')
+        new_graph = dgl.DGLGraph()
+        new_graph.add_nodes(len(node_filters))
+        src, dest = tuple(zip(*[(i, j) for i in range(len(node_filters)) for j in range(len(node_filters)) if i != j]))
+        src_past, dest_past = tuple(zip(*[(i, j) for i in node_filters for j in node_filters if
+                                          i != j]))
+        new_graph.add_edges(src, dest)
+
+        # Compute edge filters based on added and removed nodes
+        if mode == "run":
+            if self.graph[idx] is None:
+                edge_filters = new_graph.edge_ids(src_past, dest_past).long().to(self.device)
+            else:
+                edge_filters = self.graph[idx].edge_ids(src_past, dest_past).long().to(self.device)
+        else:
+            if self.train_graph[idx] is None:
+                edge_filters = new_graph.edge_ids(src_past, dest_past).long().to(self.device)
+            else:
+                edge_filters = self.train_graph[idx].edge_ids(src_past, dest_past).long().to(self.device)
+
+        node_filters = torch.Tensor(node_filters).long().to(self.device)
+        if num_added_nodes != 0:
+            added = num_added_nodes
+            new_graph.add_nodes(num_added_nodes)
+            new_idx = len(node_filters)
+            src, dest = tuple(zip(*[(i, j) for i in range(new_idx + added) for j in range(new_idx + added)
+                                    if (i in range(new_idx, new_idx + added) or j in range(new_idx, new_idx + added))
+                                    and i != j]))
+
+            new_graph.add_edges(src, dest)
+        new_graph.to(device)
+
+        return new_graph, edge_filters
+
+    def prep_hidden(self,hidden, remain_mask, added_num):
+        hid_filtered = [(hidden[0].gather(1, remain_mask[0].long()[None, :, None].repeat(1, 1, self.dim_lstm_out)),
+                           hidden[1].gather(1, remain_mask[0].long()[None, :, None].repeat(1, 1, self.dim_lstm_out)))]
+
+        hid_added = [(torch.cat([k[0], torch.zeros([1, added, self.dim_lstm_out]).to(self.device)], dim=1),
+                        torch.cat([k[1], torch.zeros([1, added, self.dim_lstm_out]).to(self.device)], dim=1))
+                       for k, added in zip(hid_filtered, added_num)]
+
+        e_hid_1, e_hid_2 = zip(*hid_added)
+        hidden_processed = (torch.cat(e_hid_1, dim=1), torch.cat(e_hid_2, dim=1))
+
+        return hidden_processed
+
+    def update(self):
+        if self.replay_memory.num_data > self.args['sampling_wait_time']:
+            self.optimizer.zero_grad()
+            batches = self.replay_memory.sample(self.args['batch_size'])
+            pred_vals = self.compute_prediction(self.dqn_net, batches[0][0],
+                                                batches[1]).gather(1,
+                                                torch.Tensor(batches[0][1]).long().to(self.device)[:,None])
+            target_vals = self.compute_prediction(self.target_dqn_net,
+                                                  batches[0][4], batches[1]).max(1)[0][:,None]
+            done_tensor = torch.Tensor(batches[0][3]).to(self.device)[:,None]
+            target_vals = torch.Tensor(batches[0][2]).to(self.device)[:,None] + \
+                          self.args['disc_rate'] * (1-done_tensor) * target_vals
+
+            loss = self.loss_module(pred_vals, target_vals.detach())
+            loss.backward()
+            self.optimizer.step()
+
+            soft_copy(self.target_dqn_net, self.dqn_net, self.args['tau'])
+
+    def compute_prediction(self, model, state_batch, pack_index):
+        pointer = 0
+        output = [None] * len(state_batch)
+        prev_hidden_e = [None] * len(state_batch)
+        prev_hidden_n = [None] * len(state_batch)
+        prev_hidden_u = [None] * len(state_batch)
+        self.train_graph = [None] * len(state_batch)
+        self.hidden_train_u = [None] * len(state_batch)
+        total_call = 0.0
+        prepped_obs_time = 0.0
+        unpack_time = 0.0
+        while pointer < len(pack_index) and pack_index[pointer] != 0:
+            batch_data = [data[pointer] for data in state_batch[:pack_index[pointer]]]
+            # if init, use no masks and assume all agents are new
+            if pointer == 0:
+                batch_data = [(data[0], data[1], list(range(len(data[0]))), 0) for data in batch_data]
+            prepped_obs = self.prep_obs(batch_data, prev_hidden_e[:pack_index[pointer]],
+                                        prev_hidden_n[:pack_index[pointer]], prev_hidden_u[:pack_index[pointer]],
+                                        mode="train")
+            self.train_graph = prepped_obs[0]
+            out, e_hid, n_hid, u_hid = self.dqn_net(dgl.batch(prepped_obs[0]), prepped_obs[1], prepped_obs[2],
+                                                    prepped_obs[3], prepped_obs[4], prepped_obs[5], prepped_obs[6])
+            output[:pack_index[pointer]] = out
+            prev_hidden_e[:pack_index[pointer]]= e_hid
+            prev_hidden_n[:pack_index[pointer]] = n_hid
+            u_temp = list(zip(u_hid[0][0],u_hid[1][0]))
+            prev_hidden_u[:pack_index[pointer]] = [(u_hid[0][None,None,:], u_hid[1][None,None,:]) for u_hid in u_temp]
+
+            pointer += 1
+
+        return torch.cat([tens[None,:] for tens in output], dim=0)

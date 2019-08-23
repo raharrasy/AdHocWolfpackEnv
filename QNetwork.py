@@ -527,6 +527,17 @@ class MRFMessagePassingModule(nn.Module):
         returned_values = torch.cat([(g.ndata['util_msg'] + g.ndata['indiv_util'])[0][None,:]
                           for g in unbatched_graphs], dim=0)
 
+        # Clear graphs to reduce memory
+        for g in unbatched_graphs:
+            n_key_list = list(g.ndata.keys())
+            e_key_list = list(g.edata.keys())
+
+            for key in e_key_list:
+                g.edata.pop(key)
+
+            for key in n_key_list:
+                g.ndata.pop(key)
+
         return returned_values
 
 

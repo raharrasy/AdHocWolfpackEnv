@@ -884,7 +884,7 @@ class Visualizer(object):
             pygame.quit()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64 ,help='batch size')
+parser.add_argument('--batch_size', type=int, default=32 ,help='batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experience replay capacity')
@@ -947,6 +947,7 @@ if __name__ == '__main__':
         #env_obs = [env.reset() for env in envs]
         player.reset(env_obs)
         done = False
+        total_update_time = 0
         while not done:
             player_acts = player.step(env_obs)
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
@@ -962,7 +963,7 @@ if __name__ == '__main__':
                 player.update()
 
         end = timeit.default_timer()
-        print("Eps Done!!! Took these seconds : ", end-start)
+        print("Eps Done!!! Took these seconds : ", str(end-start))
         player.set_epsilon(max(1.0-((eps_index+1.0)/1250.0), 0.05))
         if (eps_index+1)%arguments['saving_frequency'] == 0:
             player.save_parameters("parameters/params_"+str((eps_index+1)//arguments['saving_frequency']))

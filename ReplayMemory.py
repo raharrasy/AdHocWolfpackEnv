@@ -149,7 +149,7 @@ class ReplayMemoryGraph(object):
     def __init__(self, max_capacity=1000000, seq_length=20):
         self.max_capacity = max_capacity
         self.pointer = 0
-        self.storage = [None] * self.max_capacity
+        self.storage = np.asarray([None] * self.max_capacity)
         self.eps_nums = np.asarray([None] * self.max_capacity)
         self.num_data = 0
         self.eps_num = 0
@@ -157,19 +157,24 @@ class ReplayMemoryGraph(object):
 
     def insert(self, data):
         self.storage[self.pointer] = data
-        self.eps_nums = self.eps_num
-        if data[3] == 'True':
+        self.eps_nums[self.pointer] = self.eps_num
+        if data[3] == True:
             self.eps_num +=1
         self.pointer = (self.pointer+1) % self.max_capacity
-        self.num_data = max(self.num_data + 1, self.max_capacity)
+        self.num_data = min(self.num_data + 1, self.max_capacity)
 
     def sample(self, batch_size):
         if batch_size < self.num_data:
             sampled_idx = sample(range(self.num_data), batch_size)
-            end_points = [max(samp + self.seq_length, self.num_data) for samp in sampled_idx]
-            valid_lengths = [sum(self.eps_nums[start:end] == self.eps_nums[start])
+            if self.num_data < self.max_capacity:
+                end_points = [min(samp + self.seq_length, self.num_data) for samp in sampled_idx]
+            else:
+                end_points = [samp + self.seq_length for samp in sampled_idx]
+
+            valid_lengths = [sum(self.eps_nums.take(range(start,end), mode='wrap') == self.eps_nums[start])
                              for start, end in zip(sampled_idx, end_points)]
-            dataset = [self.storage[start:start+leng] for start, leng in zip(sampled_idx, valid_lengths)]
+            dataset = [self.storage.take(range(start,start+leng), mode='wrap')
+                       for start, leng in zip(sampled_idx, valid_lengths)]
             dataset.sort(key=lambda x : len(x), reverse=True)
 
             pointer = 0
@@ -180,6 +185,14 @@ class ReplayMemoryGraph(object):
                 while pointer < len(valid_lengths) and valid_lengths[pointer] < (a+1):
                     pointer += 1
                 batch_len[a] = batch_size - pointer
+
+            obs = [[info[0] for info in elem] for elem in dataset]
+            actions = [elem[-1][1] for elem in dataset]
+            rewards = [elem[-1][2] for elem in dataset]
+            dones = [elem[-1][3] for elem in dataset]
+            next_obs = [[info[4] for info in elem] for elem in dataset]
+
+            dataset = (obs, actions, rewards, dones, next_obs)
 
             return dataset, batch_len
 
