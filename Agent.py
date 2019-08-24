@@ -1089,7 +1089,7 @@ class AdHocShortBPTTAgent(Agent):
     def set_epsilon(self, eps):
         self.epsilon = eps
     def create_input_graph(self, node_filters, num_added_nodes, idx=0):
-        device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda:0')
+        device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda')
         new_graph = dgl.DGLGraph()
         new_graph.add_nodes(len(node_filters))
         src, dest = tuple(zip(*[(i, j) for i in range(len(node_filters)) for j in range(len(node_filters)) if i != j]))
@@ -1326,7 +1326,7 @@ class AdHocDQNAgent(Agent):
         torch.save(self.dqn_net.state_dict(), filename)
 
     def create_input_graph(self, node_filters, num_added_nodes, idx=0, mode="run"):
-        device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda:0')
+        device = torch.device('cpu') if self.device == "cpu" else torch.device('cuda')
         new_graph = dgl.DGLGraph()
         new_graph.add_nodes(len(node_filters))
         src, dest = tuple(zip(*[(i, j) for i in range(len(node_filters)) for j in range(len(node_filters)) if i != j]))

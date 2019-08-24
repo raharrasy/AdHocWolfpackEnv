@@ -220,7 +220,7 @@ class MapProcessor(nn.Module):
         return out
 
 class RFMBlock(nn.Module):
-    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, dim_out):
+    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, dim_out, mode="short_bptt"):
         super(RFMBlock, self).__init__()
         self.fc_edge = nn.Linear(dim_in_edge,hidden_dim)
         self.fc_edge2 = nn.Linear(hidden_dim, dim_out)
@@ -228,6 +228,8 @@ class RFMBlock(nn.Module):
         self.fc_node2 = nn.Linear(hidden_dim, dim_out)
         self.fc_u = nn.Linear(dim_in_u, hidden_dim)
         self.fc_u2 = nn.Linear(hidden_dim, dim_out)
+
+        self.mode = mode
         # Check Graph batch
 
         self.graph_msg = fn.copy_edge(edge='edge_feat', out='m')
@@ -237,8 +239,7 @@ class RFMBlock(nn.Module):
         return {'m': edges.data['edge_feat'] }
 
     def graph_reduce_func(self,nodes):
-        msgs = torch.sum(nodes.mailbox['m'], dim=1)
-        return {'h': msgs}
+        return {'h': torch.sum(nodes.mailbox['m'], dim=1)}
 
     def compute_edge_repr(self, graph, edges, g_repr):
         edge_nums = graph.batch_num_edges
@@ -269,7 +270,18 @@ class RFMBlock(nn.Module):
         edge_trf_func = lambda x : self.compute_edge_repr(edges=x, graph=graph, g_repr=g_repr)
 
         graph.apply_edges(edge_trf_func)
-        graph.update_all(self.graph_message_func, self.graph_reduce_func, node_trf_func)
+
+        if self.mode == "short_bptt":
+            e_func = fn.copy_edge(edge='edge_feat', out='m')
+        else:
+            e_func = self.graph_message_func
+
+        if self.mode == 'short_bptt':
+            agg_func = fn.sum(msg='m', out='h')
+        else:
+            agg_func = self.graph_reduce
+
+        graph.update_all(e_func, agg_func, node_trf_func)
         #graph.update_all(self.graph_msg, self.graph_reduce, node_trf_func)
 
 
@@ -287,11 +299,12 @@ class RFMBlock(nn.Module):
         return e_out, n_out, self.compute_u_repr(n_comb, e_comb, g_repr)
 
 class GraphLSTM(nn.Module):
-    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, dim_out, unbatch_return_feats=True):
+    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, dim_out, unbatch_return_feats=True, mode="short_bptt"):
         super(GraphLSTM, self).__init__()
         self.lstm_edge = nn.LSTM(dim_in_edge, dim_out, batch_first=True)
         self.lstm_node = nn.LSTM(dim_in_node, dim_out, batch_first=True)
         self.lstm_u = nn.LSTM(dim_in_u, dim_out, batch_first=True)
+        self.mode = mode
 
         self.graph_msg = fn.copy_edge(edge='edge_feat', out='m')
         self.graph_reduce = fn.sum(msg='m', out='h')
@@ -301,8 +314,7 @@ class GraphLSTM(nn.Module):
         return {'m': edges.data['edge_feat'] }
 
     def graph_reduce_func(self,nodes):
-        msgs = torch.sum(nodes.mailbox['m'], dim=1)
-        return {'h': msgs}
+        return {'h': torch.sum(nodes.mailbox['m'], dim=1)}
 
     def compute_edge_repr(self, graph, edges, g_repr):
         edge_nums = graph.batch_num_edges
@@ -351,8 +363,18 @@ class GraphLSTM(nn.Module):
 
         edge_trf_func = lambda x: self.compute_edge_repr(edges=x, graph=graph, g_repr=g_repr)
         graph.apply_edges(edge_trf_func)
-        graph.update_all(self.graph_message_func, self.graph_reduce_func, node_trf_func)
-        #graph.update_all(self.graph_msg, self.graph_reduce, node_trf_func)
+        if self.mode == "short_bptt":
+            e_func = fn.copy_edge(edge='edge_feat', out='m')
+        else:
+            e_func = self.graph_message_func
+
+        if self.mode == 'short_bptt':
+            agg_func = fn.sum(msg='m', out='h')
+        else:
+            agg_func = self.graph_reduce
+        graph.update_all(e_func, agg_func, node_trf_func)
+
+        #graph.update_all(e_func, self.graph_reduce, node_trf_func)
 
         e_comb = dgl.sum_edges(graph, 'edge_feat')
         n_comb = dgl.sum_nodes(graph, 'node_feat')

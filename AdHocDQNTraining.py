@@ -883,7 +883,7 @@ class Visualizer(object):
             pygame.quit()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64 ,help='batch size')
+parser.add_argument('--batch_size', type=int, default=32 ,help='batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experience replay capacity')
