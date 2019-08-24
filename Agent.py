@@ -1179,12 +1179,15 @@ class AdHocDQNAgent(Agent):
 
         # Set params for step
         self.graph = [None]
-        self.train_graph = None
         self.next_graph = [None]
         self.obs = None
         self.next_obs = None
         self.epsilon = epsilon
-        self.hidden_train_u = None
+
+        self.edge_filter = None
+        self.next_edge_filter = None
+        self.node_filter = None
+        self.next_node_filter = None
 
         self.loss_module = nn.MSELoss()
         self.replay_memory = ReplayMemoryGraph(seq_length=self.args['max_seq_length'])
@@ -1194,12 +1197,14 @@ class AdHocDQNAgent(Agent):
 
     def step(self, obs):
         if self.next_obs is None:
-            outs = self.prep_obs(obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+            outs, self.edge_filter = self.prep_obs(obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+            self.node_filter = torch.Tensor(obs[0][2]).to(self.device)
             prepped_obs = outs
             self.graph = outs[0]
 
         else:
             self.graph, prepped_obs = self.next_graph, self.next_obs
+            self.edge_filter, self.node_filter = self.next_edge_filter, self.next_node_filter
 
         self.obs = prepped_obs
 
@@ -1221,11 +1226,18 @@ class AdHocDQNAgent(Agent):
 
     def set_next_state(self, cur_obs, actions, rewards, dones, next_obs):
         # Set all necessary data for next forward computation
-        self.next_obs = self.prep_obs(next_obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+        self.next_obs, self.next_edge_filter = self.prep_obs(next_obs, self.hidden_edge, self.hidden_node,
+                                                             self.hidden_u)
+        self.next_node_filter = torch.Tensor(next_obs[0][2]).to(self.device)
         self.next_graph = self.next_obs[0]
         self.prev_hidden = self.curr_hidden
 
-        self.replay_memory.insert((cur_obs[0], actions, rewards, dones, next_obs[0]))
+        self.replay_memory.insert((self.obs[1], self.obs[2], self.obs[3], self.graph, self.node_filter,
+                                   self.edge_filter,
+                                   actions, rewards, dones,
+                                   self.next_obs[1], self.next_obs[2], self.next_obs[3],
+                                   self.next_graph, self.next_node_filter, self.next_edge_filter))
+
         self.curr_hidden = (self.next_obs[4], self.next_obs[5], self.next_obs[6])
 
 
@@ -1291,8 +1303,8 @@ class AdHocDQNAgent(Agent):
         hid_u = (torch.cat(hid_1_u, dim=1), torch.cat(hid_2_u, dim=1))
 
 
-        return new_graphs, e_feat, n_feat, u_feat,\
-               hid_e, hid_n, hid_u
+        return (new_graphs, e_feat, n_feat, u_feat,\
+               hid_e, hid_n, hid_u), edge_filters
 
     def reset(self, obs):
         self.hidden_edge = [None]
@@ -1365,13 +1377,15 @@ class AdHocDQNAgent(Agent):
         if self.replay_memory.num_data > self.args['sampling_wait_time']:
             self.optimizer.zero_grad()
             batches = self.replay_memory.sample(self.args['batch_size'])
-            pred_vals = self.compute_prediction(self.dqn_net, batches[0][0],
+            pred_vals = self.compute_prediction(self.dqn_net, batches[0][0], batches[0][1],
+                                                batches[0][2], batches[0][3], batches[0][4], batches[0][5],
                                                 batches[1]).gather(1,
-                                                torch.Tensor(batches[0][1]).long().to(self.device)[:,None])
-            target_vals = self.compute_prediction(self.target_dqn_net,
-                                                  batches[0][4], batches[1]).max(1)[0][:,None]
-            done_tensor = torch.Tensor(batches[0][3]).to(self.device)[:,None]
-            target_vals = torch.Tensor(batches[0][2]).to(self.device)[:,None] + \
+                                                torch.Tensor(batches[0][6]).long().to(self.device)[:,None])
+            target_vals = self.compute_prediction(self.target_dqn_net, batches[0][9], batches[0][10],
+                                                batches[0][11], batches[0][12], batches[0][13], batches[0][14],
+                                                batches[1]).max(1)[0][:,None]
+            done_tensor = torch.Tensor(batches[0][8]).to(self.device)[:,None]
+            target_vals = torch.Tensor(batches[0][7]).to(self.device)[:,None] + \
                           self.args['disc_rate'] * (1-done_tensor) * target_vals
 
             loss = self.loss_module(pred_vals, target_vals.detach())
@@ -1380,28 +1394,68 @@ class AdHocDQNAgent(Agent):
 
             soft_copy(self.target_dqn_net, self.dqn_net, self.args['tau'])
 
-    def compute_prediction(self, model, state_batch, pack_index):
+    def compute_prediction(self, model, e_feats, n_feats ,u_feats, graphs, node_filters, edge_filters, pack_index):
         pointer = 0
-        output = [None] * len(state_batch)
-        prev_hidden_e = [None] * len(state_batch)
-        prev_hidden_n = [None] * len(state_batch)
-        prev_hidden_u = [None] * len(state_batch)
-        self.train_graph = [None] * len(state_batch)
-        self.hidden_train_u = [None] * len(state_batch)
-        total_call = 0.0
-        prepped_obs_time = 0.0
-        unpack_time = 0.0
+        output = [None] * len(e_feats)
+        prev_hidden_e = [None] * len(e_feats)
+        prev_hidden_n = [None] * len(e_feats)
+        prev_hidden_u = [None] * len(e_feats)
+        self.train_graph = [None] * len(e_feats)
+        self.hidden_train_u = [None] * len(e_feats)
+
+        zipped_inputs = list(zip(e_feats, n_feats ,u_feats, graphs, edge_filters, node_filters))
         while pointer < len(pack_index) and pack_index[pointer] != 0:
-            batch_data = [data[pointer] for data in state_batch[:pack_index[pointer]]]
+            # Unpack data
+            batch_edge_feat = torch.cat([data[0][pointer] for
+                                            data in zipped_inputs[:pack_index[pointer]]], dim=0)
+            batch_node_feat = torch.cat([data[1][pointer] for
+                                         data in zipped_inputs[:pack_index[pointer]]], dim=0)
+            batch_u_feat = torch.cat([data[2][pointer] for data in zipped_inputs[:pack_index[pointer]]])
+            batch_graph = dgl.batch([data[3][pointer][0] for data in zipped_inputs[:pack_index[pointer]]])
+            batch_edge_filters = [data[4][pointer] for data in zipped_inputs[:pack_index[pointer]]]
+            batch_node_filters = [data[5][pointer] for data in zipped_inputs[:pack_index[pointer]]]
             # if init, use no masks and assume all agents are new
             if pointer == 0:
-                batch_data = [(data[0], data[1], list(range(len(data[0]))), 0) for data in batch_data]
-            prepped_obs = self.prep_obs(batch_data, prev_hidden_e[:pack_index[pointer]],
-                                        prev_hidden_n[:pack_index[pointer]], prev_hidden_u[:pack_index[pointer]],
-                                        mode="train")
-            self.train_graph = prepped_obs[0]
-            out, e_hid, n_hid, u_hid = self.dqn_net(dgl.batch(prepped_obs[0]), prepped_obs[1], prepped_obs[2],
-                                                    prepped_obs[3], prepped_obs[4], prepped_obs[5], prepped_obs[6])
+                for idx, edge_num in enumerate(batch_graph.batch_num_edges):
+                    prev_hidden_e[idx] = (torch.zeros([1,edge_num, 10]).to(self.device),
+                                         torch.zeros([1,edge_num, 10]).to(self.device))
+                for idx, node_num in enumerate(batch_graph.batch_num_nodes):
+                    prev_hidden_n[idx] = (torch.zeros([1,node_num, 10]).to(self.device),
+                                         torch.zeros([1,node_num, 10]).to(self.device))
+                for idx, _ in enumerate(batch_graph.batch_num_nodes):
+                    prev_hidden_u[idx] = (torch.zeros([1,1, 10]).to(self.device),
+                                         torch.zeros([1,1, 10]).to(self.device))
+            else:
+                for idx, edge_num in enumerate(batch_graph.batch_num_edges):
+                    filtered_hids = (prev_hidden_e[idx][0].gather(1, batch_edge_filters[idx].long()[None,
+                                                                           :, None].repeat(1, 1, self.dim_lstm_out)),
+                           prev_hidden_e[idx][1].gather(1, batch_edge_filters[idx].long()[None,
+                                                           :, None].repeat(1, 1, self.dim_lstm_out)))
+
+                    prev_hidden_e[idx] = (torch.cat([filtered_hids[0],
+                                                     torch.zeros([1, edge_num-filtered_hids[0].shape[1],10])], dim = 1),
+                                          torch.cat([filtered_hids[1],
+                                                     torch.zeros([1, edge_num-filtered_hids[1].shape[1], 10])], dim=1))
+
+                for idx, node_num in enumerate(batch_graph.batch_num_nodes):
+                    filtered_hids = (prev_hidden_n[idx][0].gather(1, batch_node_filters[idx].long()[None,
+                                                                           :, None].repeat(1, 1, self.dim_lstm_out)),
+                           prev_hidden_n[idx][1].gather(1, batch_node_filters[idx].long()[None,
+                                                           :, None].repeat(1, 1, self.dim_lstm_out)))
+
+                    prev_hidden_n[idx] = (torch.cat([filtered_hids[0],
+                                                     torch.zeros([1, node_num-filtered_hids[0].shape[1],10])], dim = 1),
+                                          torch.cat([filtered_hids[1],
+                                                     torch.zeros([1, node_num-filtered_hids[1].shape[1], 10])], dim=1))
+
+
+
+            hid_es = tuple([torch.cat(a, dim=1) for a in list(zip(*prev_hidden_e[:pack_index[pointer]]))])
+            hid_ns = tuple([torch.cat(a, dim=1) for a in list(zip(*prev_hidden_n[:pack_index[pointer]]))])
+            hid_us = tuple([torch.cat(a, dim=1) for a in list(zip(*prev_hidden_u[:pack_index[pointer]]))])
+
+            out, e_hid, n_hid, u_hid = model(batch_graph, batch_edge_feat, batch_node_feat,
+                                                    batch_u_feat, hid_es, hid_ns, hid_us)
             output[:pack_index[pointer]] = out
             prev_hidden_e[:pack_index[pointer]]= e_hid
             prev_hidden_n[:pack_index[pointer]] = n_hid

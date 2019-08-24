@@ -891,7 +891,7 @@ parser.add_argument('--num_predators', type=int, default=2, help='number of pred
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
 parser.add_argument('--max_bptt_length', type=int, default=20, help="length of state sequence")
 parser.add_argument('--num_episodes', type=int, default=2500, help="Number of episodes for training")
-parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
+parser.add_argument('--update_frequency', type=int, default=32, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--anneal_end', type=int, default=4000, help="Number of episodes until linear annealing stops")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
@@ -963,10 +963,7 @@ if __name__ == '__main__':
             num_timesteps += 1
             total_timesteps += 1
             if total_timesteps % arguments['update_frequency'] == 0:
-                start_update = timeit.default_timer()
                 player.update()
-                end_update = timeit.default_timer()
-                total_update_time += end_update - start_update
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", str(end-start), " with total update time : ", str(total_update_time))

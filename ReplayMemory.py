@@ -158,7 +158,7 @@ class ReplayMemoryGraph(object):
     def insert(self, data):
         self.storage[self.pointer] = data
         self.eps_nums[self.pointer] = self.eps_num
-        if data[3] == True:
+        if data[8] == True:
             self.eps_num +=1
         self.pointer = (self.pointer+1) % self.max_capacity
         self.num_data = min(self.num_data + 1, self.max_capacity)
@@ -186,13 +186,25 @@ class ReplayMemoryGraph(object):
                     pointer += 1
                 batch_len[a] = batch_size - pointer
 
-            obs = [[info[0] for info in elem] for elem in dataset]
-            actions = [elem[-1][1] for elem in dataset]
-            rewards = [elem[-1][2] for elem in dataset]
-            dones = [elem[-1][3] for elem in dataset]
-            next_obs = [[info[4] for info in elem] for elem in dataset]
+            e_feats = [[info[0] for info in elem] for elem in dataset]
+            n_feats = [[info[1] for info in elem] for elem in dataset]
+            u_feats = [[info[2] for info in elem] for elem in dataset]
+            graphs = [[info[3] for info in elem] for elem in dataset]
+            node_filters = [[info[4] for info in elem] for elem in dataset]
+            edge_filters = [[info[5] for info in elem] for elem in dataset]
+            actions = [elem[-1][6] for elem in dataset]
+            rewards = [elem[-1][7] for elem in dataset]
+            dones = [elem[-1][8] for elem in dataset]
+            next_e_feats = [[info[9] for info in elem] for elem in dataset]
+            next_n_feats = [[info[10] for info in elem] for elem in dataset]
+            next_u_feats = [[info[11] for info in elem] for elem in dataset]
+            next_graphs = [[info[12] for info in elem] for elem in dataset]
+            next_node_filters = [[info[13] for info in elem] for elem in dataset]
+            next_edge_filters = [[info[14] for info in elem] for elem in dataset]
 
-            dataset = (obs, actions, rewards, dones, next_obs)
+            dataset = (e_feats, n_feats ,u_feats, graphs, node_filters, edge_filters,
+                       actions, rewards, dones, next_e_feats, next_n_feats , next_u_feats,
+                       next_graphs, next_node_filters, next_edge_filters)
 
             return dataset, batch_len
 
