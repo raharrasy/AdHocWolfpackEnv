@@ -5,7 +5,7 @@ import pickle as pkl
 import argparse
 import torch
 from Agent import *
-#import pygame
+import pygame
 import ray
 from QNetwork import *
 
@@ -188,7 +188,8 @@ class OpenScheduler(object):
 class Wolfpack(object):
     def __init__(self, grid_height, grid_width, agent_list, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None,
+                 with_vis = False):
         self.grid_height = grid_height
         self.grid_width = grid_width
         self.scheduler = scheduler
@@ -203,6 +204,7 @@ class Wolfpack(object):
 
         self.grid = [[0 for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.RGB_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
+        self.coloured_agent_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.num_players = num_players
         self.max_food_num = max_food_num
         self.max_time_steps = max_time_steps
@@ -212,7 +214,10 @@ class Wolfpack(object):
         app.initialiseMap()
         app.simulate(2)
         self.levelMap = app.booleanMap
-        #self.visualizer = Visualizer(self.grid, self.grid_height, self.grid_width)
+        self.with_vis = with_vis
+
+        if self.with_vis:
+            self.visualizer = Visualizer(self.coloured_agent_grid, self.grid_height, self.grid_width)
 
         self.obstacleCoord = [(iy, ix) for ix, row in enumerate(self.levelMap) for iy, i in enumerate(row) if i]
         self.possibleCoordinates = None
@@ -264,6 +269,7 @@ class Wolfpack(object):
                                 for a in range(2 * self.pads + self.grid_height)]
         self.grid = [[0 for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.RGB_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
+        self.coloured_agent_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.possibleCoordinates = [(iy, ix) for ix, row in enumerate(self.levelMap) for iy, i in enumerate(row) if
                                     not i]
 
@@ -285,14 +291,17 @@ class Wolfpack(object):
         for coord in self.possibleCoordinates:
             self.grid[coord[0]][coord[1]] = 1
             self.RGB_grid[coord[0]][coord[1]] = [0, 0, 0]
+            self.coloured_agent_grid[coord[0]][coord[1]] = [0, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [0, 0, 0]
-        for coord in self.player_positions:
+        for idx, coord in enumerate(self.player_positions):
             self.grid[coord[0]][coord[1]] = 2
             self.RGB_grid[coord[0]][coord[1]] = [255, 255, 255]
+            self.coloured_agent_grid[coord[0]][coord[1]] = list(self.agent_list[idx].color)
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 255, 255]
         for coord in self.food_positions:
             self.grid[coord[0]][coord[1]] = 3
             self.RGB_grid[coord[0]][coord[1]] = [255, 0, 0]
+            self.coloured_agent_grid[coord[0]][coord[1]] = [255, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 0, 0]
 
         self.remaining_timesteps = self.max_time_steps
@@ -475,6 +484,7 @@ class Wolfpack(object):
             if self.food_alive_statuses[idx]:
                 self.grid[self.food_positions[idx][0]][self.food_positions[idx][1]] = 3
                 self.RGB_grid[self.food_positions[idx][0]][self.food_positions[idx][1]] = [255, 0, 0]
+                self.coloured_agent_grid[self.food_positions[idx][0]][self.food_positions[idx][1]] = [255, 0, 0]
                 self.RGB_padded_grid[self.food_positions[idx][0] + self.pads][self.food_positions[idx][1] + self.pads] \
                     = [255, 0, 0]
 
@@ -527,6 +537,7 @@ class Wolfpack(object):
         for a in self.player_positions:
             self.grid[a[0]][a[1]] = 1
             self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+            self.coloured_agent_grid[a[0]][a[1]] = [0, 0, 0]
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
         self.player_positions = post_player_position
 
@@ -590,6 +601,7 @@ class Wolfpack(object):
         for a in self.food_positions:
             self.grid[a[0]][a[1]] = 1
             self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+            self.coloured_agent_grid[a[0]][a[1]] = [0, 0, 0]
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
         self.food_positions = post_food_position
 
@@ -597,10 +609,12 @@ class Wolfpack(object):
             if self.food_alive_statuses[idx]:
                 self.grid[a[0]][a[1]] = 3
                 self.RGB_grid[a[0]][a[1]] = [255, 0, 0]
+                self.coloured_agent_grid[a[0]][a[1]] = [255, 0, 0]
                 self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 0, 0]
-        for a in self.player_positions:
+        for idx, a in enumerate(self.player_positions):
             self.grid[a[0]][a[1]] = 2
             self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
+            self.coloured_agent_grid[a[0]][a[1]] = list(self.agent_list[idx].color)
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 255, 255]
         # I'm here
         # Calculate player points and food status
@@ -716,9 +730,10 @@ class Wolfpack(object):
         self.player_positions.extend(added_pos)
         self.player_obs_type.extend(new_types)
         self.agent_list.extend(new_agent)
-        for a in added_pos:
+        for idx, a in enumerate(added_pos):
             self.grid[a[0]][a[1]] = 2
             self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
+            self.coloured_agent_grid[a[0]][a[1]] = list(new_agent[idx].color)
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 255, 255]
             self.num_players += 1
 
@@ -727,6 +742,7 @@ class Wolfpack(object):
             a = self.player_positions[idx]
             self.grid[a[0]][a[1]] = 1
             self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+            self.coloured_agent_grid[a[0]][a[1]] = [0, 0, 0]
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
 
             self.player_positions.pop(idx)
@@ -756,7 +772,8 @@ class Wolfpack(object):
                         self.food_points, [self.remaining_timesteps == 0
                                            for a in range(self.max_food_num)])
 
-        #self.visualizer.grid = self.grid
+        if self.with_vis:
+            self.visualizer.grid = self.coloured_agent_grid
 
         return player_returns, food_returns
     def set_agent_obs_type(self, list_obs):
@@ -772,8 +789,9 @@ class Wolfpack(object):
                        for idx in range(num_sampled)]
         return agent_inits
 
-    #def render(self):
-    #    self.visualizer.render()
+    def render(self):
+        if self.with_vis:
+            self.visualizer.render()
 
 #@ray.remote
 #def get_food(food, obs):
@@ -782,12 +800,13 @@ class Wolfpack(object):
 class AdHocWolfpack(Wolfpack):
     def __init__(self, grid_height, grid_width, agent, args= None, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None,
+                 with_vis=False):
         self.agent = agent
         agent_list = [agent]
         Wolfpack.__init__(self, grid_height, grid_width, agent_list, sight_sideways,
                  sight_radius, num_players, max_food_num, food_freeze_rate,
-                 max_time_steps, coop_radius, groupMultiplier, scheduler)
+                 max_time_steps, coop_radius, groupMultiplier, scheduler, with_vis=with_vis)
 
         self.args = args
         self.food_list = None
@@ -827,6 +846,7 @@ class AdHocWolfpack(Wolfpack):
         for idx, agent in enumerate(self.food_list):
             agent.load_parameters("assets/dqn_prey_parameters/exp0.0001param_10_agent_"+str(idx))
 
+
 class Visualizer(object):
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
@@ -863,12 +883,13 @@ class Visualizer(object):
         for row in range(self.grid_height):
             for column in range(self.grid_width):
                 color = self.BLUE
-                if self.grid[row][column] == 1:
-                    color = self.BLACK
-                elif self.grid[row][column] == 2:
-                    color = self.WHITE
-                elif self.grid[row][column] == 3:
-                    color = self.RED
+                # if self.grid[row][column] == 1:
+                #     color = self.BLACK
+                # elif self.grid[row][column] == 2:
+                #     color = self.WHITE
+                # elif self.grid[row][column] == 3:
+                #     color = self.RED
+                color = tuple(self.grid[row][column])
                 pygame.draw.rect(self.screen,
                                      color,
                                      [(self.MARGIN + self.WIDTH) * column + self.MARGIN,
@@ -883,7 +904,7 @@ class Visualizer(object):
             pygame.quit()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=32 ,help='batch size')
+parser.add_argument('--batch_size', type=int, default= 32 ,help='batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experience replay capacity')
@@ -935,7 +956,7 @@ if __name__ == '__main__':
     scheduler = OpenScheduler(4, arguments['add_rate'], arguments['del_rate'])
     env = AdHocWolfpack(25, 25, agent=player, args=arguments,
                             num_players=arguments['num_predators'], max_food_num=arguments['num_food'],
-                            max_time_steps=arguments['episode_length'], scheduler=scheduler)
+                            max_time_steps=arguments['episode_length'], scheduler=scheduler, with_vis=True)
     env.load_map('level_1.pkl')
     # Setup
 
@@ -947,11 +968,13 @@ if __name__ == '__main__':
         num_timesteps = 0
         env_obs = [env.reset()]
         player.reset(env_obs)
+        env.render()
         done = False
         total_update_time = 0
         while not done:
             player_act = player.step(env_obs)
             player_obs = env.step(player_act)
+            env.render()
             next_obs = [player_obs[0]]
             rewards = [player_obs[1]]
             dones = [player_obs[2]]

@@ -28,6 +28,7 @@ class Agent(object):
 class RandomAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(RandomAgent, self).__init__(agent_id, obs_type)
+        self.color = (148,0,211)
 
     def act(self, obs=None):
         return random.randint(0, 6)
@@ -36,6 +37,7 @@ class RandomAgent(Agent):
 class GreedyPredatorAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyPredatorAgent, self).__init__(agent_id, obs_type)
+        self.color = (51, 255, 51)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -140,6 +142,7 @@ class GreedyPredatorAgent(Agent):
 class GreedyProbabilisticAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyProbabilisticAgent, self).__init__(agent_id, obs_type)
+        self.color = (255,51,153)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -257,6 +260,7 @@ class GreedyProbabilisticAgent(Agent):
 class TeammateAwarePredator(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(TeammateAwarePredator, self).__init__(agent_id, obs_type)
+        self.color = (0, 255, 0)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -388,7 +392,7 @@ class DQNAgent(Agent):
         self.experience_replay = ReplayMemoryLite(state_h=obs_height, state_w=obs_width,
                                                   with_gpu=self.args['with_gpu'])
         self.dqn_net = DQN(17,9,32,self.args['max_seq_length'],7, mode="partial")
-
+        self.color = (255,0,0)
         if self.args['with_gpu']:
             self.dqn_net.cuda()
             self.dqn_net.device = "cuda:0"
@@ -455,6 +459,7 @@ class DistilledCoopAStarAgent(object):
         self.obs_type = obs_type
         self.dqn_net = GraphOppoModel(6, 0, 50, 4, 40, 20, 30, 10, 15, 7)
         self.load_params("assets/distilled_teamwork_net/distilled_net.pkl")
+        self.color = (255, 128, 0)
 
     def load_params(self, dir):
         self.dqn_net.load_state_dict(torch.load(dir))
@@ -491,6 +496,7 @@ class MADDPGAgent(Agent):
         self.mode = mode
         self.max_seq_length = max_seq_length
         self.with_gpu = with_gpu
+        self.color = (155, 204, 255)
 
         self.dqn_net = MADDPGDQN(25,25,32,self.max_seq_length,7, mode="full",
                       extended_feature_len = 6)
@@ -564,6 +570,7 @@ class AdHocLearningAgent(Agent):
                                         10, 7, with_rfm = False).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
         self.mode = mode
+        self.color = (255, 255, 0)
 
         # Initialize hidden states of prediction
         self.hidden_edge = [None for _ in range(self.args['num_envs'])]
@@ -893,6 +900,7 @@ class AdHocShortBPTTAgent(Agent):
                                         10, 7, with_rfm = False).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
         self.mode = mode
+        self.color = (255, 255, 0)
 
         # Initialize hidden states of prediction
         self.hidden_edge = [None for _ in range(self.args['num_envs'])]
@@ -1165,6 +1173,7 @@ class AdHocDQNAgent(Agent):
                                                10, 7, with_rfm=False).to(self.device)
         hard_copy(self.target_dqn_net, self.dqn_net)
         self.mode = mode
+        self.color = (255, 255, 0)
 
         # Initialize hidden states of prediction
         self.hidden_edge = [None]
