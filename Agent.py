@@ -968,7 +968,6 @@ class AdHocShortBPTTAgent(Agent):
         self.hidden_edge = e_hid
         self.hidden_node = n_hid
         self.hidden_u = list(zip([hid[None,None,:] for hid in u_hid[0][0]], [hid[None,None,:] for hid in u_hid[1][0]]))
-
         act = torch.argmax(out, dim=-1)
         self.predicted_vals.append(out.gather(1, act[:,None]))
         act = [a.item() if random.random() > self.epsilon else random.randint(0,6) for a in act]
@@ -1061,7 +1060,7 @@ class AdHocShortBPTTAgent(Agent):
         hid_1_n, hid_2_n = zip(*prep_hidden_n_list)
         hid_n = (torch.cat(hid_1_n, dim=1), torch.cat(hid_2_n, dim=1))
 
-        hid_1_u, hid_2_u = zip(*self.hidden_u)
+        hid_1_u, hid_2_u = zip(*prev_hidden_u)
         hid_u = (torch.cat(hid_1_u, dim=1), torch.cat(hid_2_u, dim=1))
 
         return new_graphs, e_feat, n_feat, u_feat,\
