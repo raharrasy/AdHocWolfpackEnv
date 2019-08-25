@@ -964,7 +964,7 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", str(end-start))
-        player.set_epsilon(max(1.0-((eps_index+1.0)/1250.0), 0.05))
+        player.set_epsilon(max(1.0-((eps_index+1.0)/1500.0), 0.05))
         if (eps_index+1)%arguments['saving_frequency'] == 0:
             player.save_parameters("parameters/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
