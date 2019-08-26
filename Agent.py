@@ -886,9 +886,11 @@ class AdHocLearningAgent(Agent):
 
 class AdHocShortBPTTAgent(Agent):
     def __init__(self, agent_id=0, args=None, obs_type="adhoc_obs", rollout_freq=8, back_prop_len=12, optimizer=None,
-                 mode="train", device=None, epsilon=1.0):
+                 mode="train", device=None, epsilon=1.0, with_oppo_model = True):
         super(AdHocShortBPTTAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
         self.args = args
+        if with_oppo_model:
+            self.chosen_logits = []
 
         # Initialize neural network dimensions
         self.dim_lstm_out = 10
@@ -896,9 +898,9 @@ class AdHocShortBPTTAgent(Agent):
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = False).to(self.device)
+                                        10, 7, with_rfm = False, with_oppo_modelling=with_oppo_model).to(self.device)
         self.target_dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
-                                        10, 7, with_rfm = False).to(self.device)
+                                        10, 7, with_rfm = False, with_oppo_modelling=with_oppo_model).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
         self.mode = mode
         self.color = (255, 255, 0)
@@ -933,6 +935,10 @@ class AdHocShortBPTTAgent(Agent):
         self.target_vals = None
         self.epsilon = epsilon
 
+        self.with_oppo_model = with_oppo_model
+        if self.with_oppo_model:
+            self.other_actions = []
+
         self.loss_module = nn.MSELoss()
 
     def step(self, obs):
@@ -945,9 +951,14 @@ class AdHocShortBPTTAgent(Agent):
             target_obs = self.prep_obs(obs, self.target_hidden_edge,
                                             self.target_hidden_node, self.target_hidden_u)
             target_batch_graph = dgl.batch(target_obs[0])
-            _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+            if self.with_oppo_model:
+                _, t_e_hid, t_n_hid, t_u_hid, _ = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
                                                                target_obs[3], target_obs[4], target_obs[5],
                                                                target_obs[6])
+            else:
+                _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+                                                                      target_obs[3], target_obs[4], target_obs[5],
+                                                                      target_obs[6])
 
             self.target_hidden_edge = t_e_hid
             self.target_hidden_node = t_n_hid
@@ -962,10 +973,17 @@ class AdHocShortBPTTAgent(Agent):
             self.curr_hidden = (self.obs[4], self.obs[5], self.obs[6])
 
         batch_graph = dgl.batch(self.obs[0])
-        out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
+        out, e_hid, n_hid, u_hid, oppo_logit = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
                                                         self.curr_hidden[0], self.curr_hidden[1],
                                                 self.curr_hidden[2])
 
+        if self.with_oppo_model:
+            indexes = [0] * len(batch_graph.batch_num_nodes)
+            for k in range(len(batch_graph.batch_num_nodes)-1):
+                indexes[k+1] = indexes[k] + batch_graph.batch_num_nodes[k]
+
+            selected = [i for i in range(oppo_logit.shape[0]) if not i in indexes]
+            self.chosen_logits.append(oppo_logit[selected])
         self.hidden_edge = e_hid
         self.hidden_node = n_hid
         self.hidden_u = list(zip([hid[None,None,:] for hid in u_hid[0][0]], [hid[None,None,:] for hid in u_hid[1][0]]))
@@ -980,6 +998,9 @@ class AdHocShortBPTTAgent(Agent):
     def set_next_state(self, next_obs, rewards, dones):
         # Set all necessary data for next forward computation
         self.next_obs = self.prep_obs(next_obs, self.hidden_edge, self.hidden_node, self.hidden_u)
+        if self.with_oppo_model:
+            self.other_actions.append(torch.cat([torch.Tensor(next_ob[4]).long().to(self.device)
+                                        for next_ob in next_obs], dim=0))
         self.next_graph = self.next_obs[0]
         self.prev_hidden = self.curr_hidden
 
@@ -990,9 +1011,15 @@ class AdHocShortBPTTAgent(Agent):
         target_obs = self.prep_obs(next_obs, self.target_hidden_edge,
                                        self.target_hidden_node, self.target_hidden_u)
         target_batch_graph = dgl.batch(target_obs[0])
-        targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+        if self.with_oppo_model:
+            targ_out, t_e_hid, t_n_hid, t_u_hid, _ = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
                                                                target_obs[3], target_obs[4], target_obs[5],
                                                                target_obs[6])
+        else:
+            targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1],
+                                                                         target_obs[2],
+                                                                         target_obs[3], target_obs[4], target_obs[5],
+                                                                         target_obs[6])
         targs = torch.max(targ_out, dim=-1)[0][:,None]
         rewards = torch.Tensor(rewards)[:,None].to(self.device)
         dones = torch.Tensor(dones)[:,None].to(self.device)
@@ -1079,6 +1106,9 @@ class AdHocShortBPTTAgent(Agent):
         self.next_graph = [None for _ in range(self.args['num_envs'])]
         self.obs = None
         self.next_obs = None
+        if self.with_oppo_model:
+            self.other_actions = []
+            self.chosen_logits = []
 
         self.prev_hidden = None
         self.curr_hidden = None
@@ -1145,13 +1175,24 @@ class AdHocShortBPTTAgent(Agent):
         self.optimizer.zero_grad()
         pred_tensor = torch.cat(self.predicted_vals, dim = 0)
         target_tensor = torch.cat(self.target_vals, dim = 0)
+
+        chosen_logits = torch.cat(self.chosen_logits, dim=0)
+        other_actions = torch.cat(self.other_actions, dim=0)
+
+        mod_loss_f = nn.CrossEntropyLoss()
+        mod_loss = mod_loss_f(chosen_logits, other_actions)
+
         loss = self.loss_module(pred_tensor, target_tensor.detach())
+        loss = loss + mod_loss
         loss.backward()
         self.optimizer.step()
 
         soft_copy(self.target_dqn_net, self.dqn_net, self.args['tau'])
         self.predicted_vals = []
         self.target_vals = []
+        if self.with_oppo_model:
+            self.chosen_logits = []
+            self.other_actions = []
 
         self.curr_hidden = ((self.curr_hidden[0][0].detach(), self.curr_hidden[0][1].detach()),
                             (self.curr_hidden[1][0].detach(), self.curr_hidden[1][1].detach()),

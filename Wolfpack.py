@@ -923,6 +923,7 @@ parser.add_argument('--del_rate', type=float,default=0.05,help="agent deletion r
 parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
 parser.add_argument('--max_seq_length', type=int, default=5, help="length of state sequence")
+parser.add_argument('--modelling_weight', type=float, default=0.01, help="weight associated with oppo modelling loss")
 parser.add_argument('--maddpg_max_seq_length', type=int, default=10, help="length of state sequence")
 
 
