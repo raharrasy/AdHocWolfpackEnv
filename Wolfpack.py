@@ -197,6 +197,7 @@ class Wolfpack(object):
         self.sight_sideways = sight_sideways
         self.sight_radius = sight_radius
         self.pads = max(self.sight_sideways, self.sight_radius)
+        self.prev_actions = None
 
         self.RGB_padded_grid = [[[0, 0, 255] for b in range(2 * self.pads + self.grid_width)]
                                 for a in range(2 * self.pads + self.grid_height)]
@@ -253,6 +254,7 @@ class Wolfpack(object):
             self.levelMap = pkl.load(f)
 
     def reset(self, agent_list):
+        self.prev_actions = None
         self.agent_list = agent_list
         self.player_obs_type = [a.obs_type for a in self.agent_list]
         self.num_players = len(self.agent_list)
@@ -279,6 +281,7 @@ class Wolfpack(object):
         self.food_alive_statuses = [True for a in range(self.max_food_num)]
         self.food_frozen_time = [0 for a in range(self.max_food_num)]
         self.food_points = [0 for a in range(self.max_food_num)]
+
 
         self.food_orientation = [0 for a in range(self.max_food_num)]
 
@@ -701,6 +704,19 @@ class Wolfpack(object):
             prob_state = np.asarray(self.RGB_grid)
 
             return pos_list, prob_state, self.masking, self.prev_added
+        elif obs_type=="adhoc_oppo_model":
+            orientation = self.player_orientation
+            positions = self.player_positions
+
+            pos_list = [list(pos_data) for pos_data in positions]
+            for pos, ord in zip(pos_list, orientation):
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
+
+            prob_state = np.asarray(self.RGB_grid)
+
+            return pos_list, prob_state, self.masking, self.prev_added, self.prev_actions
 
         # elif obs_type == "centralized_decentralized":
 
@@ -736,6 +752,7 @@ class Wolfpack(object):
             self.num_players -= 1
 
     def step(self, hunter_collective_action, food_collective_action):
+        self.prev_actions = hunter_collective_action[1:]
         self.update_state(hunter_collective_action, food_collective_action)
         if not self.scheduler is None:
             deleted, agents, new_types = self.scheduler.open_process()
@@ -928,7 +945,7 @@ if __name__ == '__main__':
     torch.set_num_threads(1)
     arguments = vars(args)
 
-    player = AdHocShortBPTTAgent(args=arguments, agent_id=0)
+    player = AdHocShortBPTTAgent(args=arguments, agent_id=0, obs_type="adhoc_oppo_model")
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
@@ -951,6 +968,7 @@ if __name__ == '__main__':
         while not done:
             player_acts = player.step(env_obs)
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
+
             #player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
