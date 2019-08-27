@@ -591,6 +591,68 @@ class AdHocWolfpackGNN(nn.Module):
 
         return out, e_hid, n_hid, u_hid
 
+class AdHocWolfpackGNNLSTMFirst(nn.Module):
+    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_lstm_out, dim_mid, dim_out,
+                 fin_mid_dim, act_dims, with_added_u_feat=False, added_u_feat_dim=0,
+                 with_rfm=False):
+        super(AdHocWolfpackGNNLSTMFirst, self).__init__()
+        self.dim_lstm_out = dim_lstm_out
+        self.MapCNN = MapProcessor(25,25, dim_in_u)
+        self.with_added_u_feat = with_added_u_feat
+        if not self.with_added_u_feat:
+            self.GraphLSTM = GraphLSTM(dim_lstm_out+ dim_in_node + dim_in_u,
+                                2 * dim_in_node + dim_in_u + dim_in_edge,
+                                2 * dim_lstm_out + dim_in_u, dim_lstm_out)
+        else:
+            self.GraphLSTM = GraphLSTM(dim_lstm_out+ dim_in_node + dim_in_u + added_u_feat_dim,
+                                2 * dim_in_node + dim_in_u + dim_in_edge + added_u_feat_dim,
+                                2 * dim_lstm_out + dim_in_u + added_u_feat_dim, dim_lstm_out)
+
+        self.GNBlock = RFMBlock(dim_mid + 2*dim_lstm_out, 4*dim_lstm_out, 2*dim_mid + dim_lstm_out,
+                                    hidden_dim, dim_mid)
+
+        self.GNBlock2 = RFMBlock(dim_out+2*dim_mid, 4*dim_mid, 2*dim_out + dim_mid, hidden_dim2, dim_out)
+        # here
+
+
+        self.with_rfm = with_rfm
+
+        if not self.with_rfm:
+            self.pre_q_net = nn.Linear(dim_out, fin_mid_dim)
+            self.q_net = nn.Linear(fin_mid_dim, act_dims)
+
+        else:
+            self.q_net = MRFMessagePassingModule(self.dim_lstm_out, self.dim_lstm_out, self.dim_lstm_out, 5, 7)
+
+
+    def forward(self, graph, edge_feat, node_feat, u_obs, hidden_e, hidden_n, hidden_u, added_u_feat=None):
+
+        g_repr = self.MapCNN.forward(u_obs)
+
+        if self.with_added_u_feat:
+            g_repr = torch.cat([g_repr, added_u_feat], dim=-1)
+
+        e_feat, e_hid, n_feat, n_hid, u_out, u_hid = self.GraphLSTM.forward(graph, edge_feat, node_feat, g_repr,
+                                                                            hidden_e,hidden_n, hidden_u)
+
+        updated_e_feat, updated_n_feat, updated_u_feat = self.GNBlock.forward(graph, e_feat,
+                                                                              n_feat, u_out)
+
+        updated_e_feat, updated_n_feat, updated_u_feat = self.GNBlock2.forward(graph,
+                                                                               updated_e_feat, updated_n_feat,
+                                                                               updated_u_feat)
+
+        inp = updated_u_feat
+
+        if not self.with_rfm:
+            out = self.q_net(F.relu(self.pre_q_net(inp)))
+        else:
+            edges = graph.edges()
+            reverse_feats = e_feat[graph.edge_ids(edges[1],edges[0])]
+            out = self.q_net(graph, e_feat, n_feat, u_out, reverse_feats)
+
+        return out, e_hid, n_hid, u_hid
+
 class GraphOppoModel(nn.Module):
     def __init__(self,dim_in_node, dim_in_edge, dim_in_u, added_u, hidden_dim, hidden_dim2, dim_mid, dim_out,
                  added_mid_dims, act_dims):

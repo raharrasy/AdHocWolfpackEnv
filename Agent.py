@@ -3,7 +3,7 @@ import math
 import sys
 import queue as Q
 from ReplayMemory import ReplayMemoryLite, ReplayMemory
-from QNetwork import DQN, AdHocWolfpackGNN, GraphOppoModel, MADDPGDQN
+from QNetwork import DQN, AdHocWolfpackGNN, GraphOppoModel, MADDPGDQN, AdHocWolfpackGNNLSTMFirst
 from misc import hard_copy, soft_copy
 from MADDPGMisc import gumbel_softmax
 import torch
@@ -886,15 +886,15 @@ class AdHocShortBPTTAgent(Agent):
         self.added_u_dim = added_u_dim
 
         # Initialize neural network dimensions
-        self.dim_lstm_out = 10
+        self.dim_lstm_out = 30
         self.device = device
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
+        self.dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
                                         10, 20, 7, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
                                         added_u_feat_dim=self.added_u_dim).to(self.device)
-        self.target_dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
+        self.target_dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
                                         10, 20, 7, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
                                         added_u_feat_dim=self.added_u_dim).to(self.device)
@@ -1032,14 +1032,14 @@ class AdHocShortBPTTAgent(Agent):
 
         for idx, obs in enumerate(obses):
             if prev_hidden_e[idx] is None:
-                prev_hidden_e[idx] = (torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 10]).to(self.device),
-                                         torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 10]).to(self.device))
+                prev_hidden_e[idx] = (torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device),
+                                         torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device))
             if prev_hidden_n[idx] is None:
-                prev_hidden_n[idx] = (torch.zeros([1, len(obs[2]), 10]).to(self.device),
-                                      torch.zeros([1, len(obs[2]), 10]).to(self.device))
+                prev_hidden_n[idx] = (torch.zeros([1, len(obs[2]), 30]).to(self.device),
+                                      torch.zeros([1, len(obs[2]), 30]).to(self.device))
             if prev_hidden_u[idx] is None:
-                prev_hidden_u[idx] = (torch.zeros([1, 1, 10]).to(self.device),
-                                      torch.zeros([1, 1, 10]).to(self.device))
+                prev_hidden_u[idx] = (torch.zeros([1, 1, 30]).to(self.device),
+                                      torch.zeros([1, 1, 30]).to(self.device))
 
             new_graph, edge_filters = self.create_input_graph(obs[2], obs[3], idx)
             new_graphs.append(new_graph)
