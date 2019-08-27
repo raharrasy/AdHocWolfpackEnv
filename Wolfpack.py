@@ -3,10 +3,13 @@ import copy
 from random import sample
 import pickle as pkl
 import argparse
+import socket
 import torch
 from Agent import *
 #import pygame
 import ray
+import os
+import time
 from QNetwork import *
 
 # import ray
@@ -936,18 +939,34 @@ def create_parallel_env(args, player, num_envs):
 
     return envs
 
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except:
+	IP = '127.0.0.1'
+    finally:
+	s.close()
+    return IP
+
 if __name__ == '__main__':
     add_rate = 0.05
     rem_rate = 0.05
     torch.set_num_threads(1)
     arguments = vars(args)
+    machine_ip = get_ip()
 
     player = AdHocShortBPTTAgent(args=arguments, agent_id=0)
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
 
-    ray.init(object_store_memory=int(1e9))
+    #ray.init(object_store_memory=int(1e9))
+    os.system("ray start --head --redis-port 8989 --object-store-memory 1000000000")
+    time.sleep(1)
+    ray.init(redis_address=str(machine_ip) + ":8989")
     envs = create_parallel_env(vars(args), player, arguments['num_envs'])
     # Setup
 
