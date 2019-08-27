@@ -592,7 +592,7 @@ class AdHocWolfpackGNN(nn.Module):
         return out, e_hid, n_hid, u_hid
 
 class AdHocWolfpackGNNLSTMFirst(nn.Module):
-    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_lstm_out, dim_mid, dim_out,
+    def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_lstm_out, dim_mid,
                  fin_mid_dim, act_dims, with_added_u_feat=False, added_u_feat_dim=0,
                  with_rfm=False):
         super(AdHocWolfpackGNNLSTMFirst, self).__init__()
@@ -611,14 +611,13 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
         self.GNBlock = RFMBlock(dim_mid + 2*dim_lstm_out, 4*dim_lstm_out, 2*dim_mid + dim_lstm_out,
                                     hidden_dim, dim_mid)
 
-        self.GNBlock2 = RFMBlock(dim_out+2*dim_mid, 4*dim_mid, 2*dim_out + dim_mid, hidden_dim2, dim_out)
         # here
 
 
         self.with_rfm = with_rfm
 
         if not self.with_rfm:
-            self.pre_q_net = nn.Linear(dim_out, fin_mid_dim)
+            self.pre_q_net = nn.Linear(dim_mid, fin_mid_dim)
             self.q_net = nn.Linear(fin_mid_dim, act_dims)
 
         else:
@@ -637,10 +636,6 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
 
         updated_e_feat, updated_n_feat, updated_u_feat = self.GNBlock.forward(graph, e_feat,
                                                                               n_feat, u_out)
-
-        updated_e_feat, updated_n_feat, updated_u_feat = self.GNBlock2.forward(graph,
-                                                                               updated_e_feat, updated_n_feat,
-                                                                               updated_u_feat)
 
         inp = updated_u_feat
 
