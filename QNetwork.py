@@ -597,7 +597,6 @@ class GraphOppoModel(nn.Module):
 
     def forward(self, graph, edge_feat, node_feat, u_obs, added_u):
 
-        #print(added_u)
         g_repr = self.MapCNN.forward(u_obs)
         g_repr = torch.cat((g_repr, added_u), dim=-1)
         updated_e_feat, updated_n_feat, updated_u_feat = self.GNBlock.forward(graph, edge_feat, node_feat, g_repr)

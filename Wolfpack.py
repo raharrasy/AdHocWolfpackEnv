@@ -462,7 +462,7 @@ class Wolfpack(object):
         cur_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in food_locations])
                                   for (px, py) in self.player_positions]
 
-        self.player_points = [0.05 * (prev_dist-cur_dist) if abs(prev_dist-cur_dist) <= 2 else 0.0
+        self.player_points = [0.05 * (prev_dist-cur_dist)
                               for prev_dist, cur_dist in zip(self.prev_dist_to_food, cur_dist_to_food)]
         self.prev_dist_to_food = cur_dist_to_food
 
@@ -790,7 +790,7 @@ class Wolfpack(object):
         return agent_inits
 
     #def render(self):
-    #    self.visualizer.render()
+    #  self.visualizer.render()
 
 #@ray.remote
 #def get_food(food, obs):
@@ -901,17 +901,13 @@ class Visualizer(object):
             pygame.quit()
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64 ,help='batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
-parser.add_argument('--exp_replay_capacity', type=int, default=1e5, help='experience replay capacity')
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
-parser.add_argument('--max_bptt_length', type=int, default=20, help="length of state sequence")
-parser.add_argument('--num_episodes', type=int, default=2500, help="Number of episodes for training")
+parser.add_argument('--num_episodes', type=int, default=5000, help="Number of episodes for training")
 parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
-parser.add_argument('--anneal_end', type=int, default=4000, help="Number of episodes until linear annealing stops")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
 parser.add_argument('--saving_frequency', type=int,default=100,help="saving frequency")
 parser.add_argument('--obs_height', type=int,default=9,help="observation_height")
@@ -931,9 +927,10 @@ args = parser.parse_args()
 def create_parallel_env(args, player, num_envs):
     schedulers = [OpenScheduler(4, args['add_rate'], args['del_rate']) for _ in range(num_envs)]
     envs = [AdHocWolfpack.remote(25, 25, agent=player, args=args,
-                            num_players=args['num_predators'], max_food_num=args['num_food'],
-                            max_time_steps=args['episode_length'], scheduler=scheduler) for scheduler
-                     in schedulers]
+                           num_players=args['num_predators'], max_food_num=args['num_food'],
+                           max_time_steps=args['episode_length'], scheduler=scheduler) for scheduler
+                    in schedulers]
+
     for env in envs:
         env.load_map.remote('level_1.pkl')
 
@@ -956,21 +953,18 @@ if __name__ == '__main__':
 
     total_timesteps = 0
 
-
     for eps_index in range(num_episodes):
         start = timeit.default_timer()
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
-        #env_obs = [env.reset() for env in envs]
         player.reset(env_obs)
+        player.set_epsilon(max(1.0-((eps_index+1.0)/3500.0), 0.05))
         done = False
         while not done:
             player_acts = player.step(env_obs)
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
-            #player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
-
             dones = [obs[2] for obs in player_obs]
             player.set_next_state(env_obs, rewards, dones)
 
@@ -981,11 +975,8 @@ if __name__ == '__main__':
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", end-start)
-        player.set_epsilon(max(1.0-((eps_index+1.0)/1500.0), 0.05))
         if (eps_index+1)%arguments['saving_frequency'] == 0:
             player.save_parameters("parameters_dense/params_"+str((eps_index+1)//arguments['saving_frequency']))
-
-
 
 # if __name__ == "__main__":
 #     num_players = 8

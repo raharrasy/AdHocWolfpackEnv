@@ -1137,8 +1137,10 @@ class AdHocShortBPTTAgent(Agent):
         self.optimizer.zero_grad()
         pred_tensor = torch.cat(self.predicted_vals, dim = 0)
         target_tensor = torch.cat(self.target_vals, dim = 0)
+
         loss = self.loss_module(pred_tensor, target_tensor.detach())
         loss.backward()
+
         self.optimizer.step()
 
         soft_copy(self.target_dqn_net, self.dqn_net, self.args['tau'])
