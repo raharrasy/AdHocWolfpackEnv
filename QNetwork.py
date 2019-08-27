@@ -314,7 +314,7 @@ class GraphLSTM(nn.Module):
         out, hidden = self.lstm_edge(inp, hidden)
         out_shape = out.shape
         out = out.view([out_shape[0], out_shape[2]])
-        return {'edge_feat': out, 'hidden1' : hidden[0][0], 'hidden2' : hidden[1][0]}
+        return {'edge_feat': F.relu(out), 'hidden1' : hidden[0][0], 'hidden2' : hidden[1][0]}
 
     def compute_node_repr(self, graph, nodes, g_repr):
         node_nums = graph.batch_num_nodes
@@ -325,14 +325,14 @@ class GraphLSTM(nn.Module):
         out, hidden = self.lstm_node(inp, hidden)
         out_shape = out.shape
         out = out.view([out_shape[0], out_shape[2]])
-        return {'node_feat' : out, 'hidden1' : hidden[0][0], 'hidden2' : hidden[1][0]}
+        return {'node_feat' : F.relu(out), 'hidden1' : hidden[0][0], 'hidden2' : hidden[1][0]}
 
     def compute_u_repr(self, n_comb, e_comb, g_repr, hidden):
         inp = torch.cat([n_comb, e_comb, g_repr], dim=-1)[:,None,:]
         out, hidden = self.lstm_u(inp, hidden)
         out_shape = out.shape
         out = out.view([out_shape[0], out_shape[2]])
-        return out, hidden
+        return F.relu(out), hidden
 
 
     def forward(self, graph, edge_feat, node_feat, g_repr, edge_hidden, node_hidden, graph_hidden):
