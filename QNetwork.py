@@ -534,7 +534,7 @@ class MRFMessagePassingModule(nn.Module):
 
 class AdHocWolfpackGNN(nn.Module):
     def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_mid, dim_out,
-                 dim_lstm_out, act_dims, with_rfm=False):
+                 dim_lstm_out, fin_mid_dim, act_dims, with_rfm=False):
         super(AdHocWolfpackGNN, self).__init__()
         self.dim_lstm_out = dim_lstm_out
         self.MapCNN = MapProcessor(25,25, dim_in_u)
@@ -548,7 +548,9 @@ class AdHocWolfpackGNN(nn.Module):
         self.GraphLSTM = GraphLSTM(dim_lstm_out+2*dim_out, 4*dim_out, 2*dim_lstm_out + dim_out, dim_lstm_out)
         self.with_rfm = with_rfm
         if not self.with_rfm:
-            self.q_net = nn.Linear(dim_lstm_out, act_dims)
+            self.pre_q_net = nn.Linear(dim_lstm_out, fin_mid_dim)
+            self.q_net = nn.Linear(fin_mid_dim, act_dims)
+
         else:
             self.q_net = MRFMessagePassingModule(self.dim_lstm_out, self.dim_lstm_out, self.dim_lstm_out, 5, 7)
 
@@ -569,7 +571,7 @@ class AdHocWolfpackGNN(nn.Module):
 
         inp = u_out.view(u_out.shape[0],-1)
         if not self.with_rfm:
-            out = self.q_net(inp)
+            out = self.q_net(F.relu(self.pre_q_net(inp)))
         else:
             edges = graph.edges()
             reverse_feats = e_feat[graph.edge_ids(edges[1],edges[0])]
