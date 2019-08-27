@@ -296,8 +296,8 @@ class Wolfpack(object):
             self.RGB_grid[coord[0]][coord[1]] = [255, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 0, 0]
 
-        self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
-                                  for (px, py) in self.player_positions]
+        #self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+        #                          for (px, py) in self.player_positions]
         self.remaining_timesteps = self.max_time_steps
 
         return [self.observation_computation(obs_type, agent_id=id) for id, obs_type in
@@ -327,6 +327,9 @@ class Wolfpack(object):
                 self.food_alive_statuses[idx] = True
                 self.food_positions[idx] = coords[coord_idx]
                 coord_idx += 1
+
+        self.prev_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in self.player_positions]
 
     def update_status(self):
         for idx in range(len(self.food_alive_statuses)):
@@ -459,8 +462,8 @@ class Wolfpack(object):
         cur_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in food_locations])
                                   for (px, py) in self.player_positions]
 
-        self.player_points = [0.05 * (prev_dist-cur_dist) for prev_dist, cur_dist in
-                              zip(self.prev_dist_to_food, cur_dist_to_food)]
+        self.player_points = [0.05 * (prev_dist-cur_dist) if abs(prev_dist-cur_dist) <= 2 else 0.0
+                              for prev_dist, cur_dist in zip(self.prev_dist_to_food, cur_dist_to_food)]
         self.prev_dist_to_food = cur_dist_to_food
 
         self.food_points = [0 for a in range(self.max_food_num)]
