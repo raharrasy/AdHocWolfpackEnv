@@ -715,7 +715,12 @@ class Wolfpack(object):
 
             prob_state = np.asarray(self.RGB_grid)
 
-            return pos_list, prob_state, self.masking, self.prev_added
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
+
+            return pos_list, prob_state, self.masking, self.prev_added, food_list
 
         # elif obs_type == "centralized_decentralized":
 
@@ -946,9 +951,9 @@ def get_ip():
         s.connect(('10.255.255.255', 1))
         IP = s.getsockname()[0]
     except:
-	IP = '127.0.0.1'
+        IP = '127.0.0.1'
     finally:
-	s.close()
+        s.close()
     return IP
 
 if __name__ == '__main__':
@@ -958,7 +963,7 @@ if __name__ == '__main__':
     arguments = vars(args)
     machine_ip = get_ip()
 
-    player = AdHocShortBPTTAgent(args=arguments, agent_id=0)
+    player = AdHocShortBPTTAgent(args=arguments, agent_id=0, with_added_u=True, added_u_dim=4)
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
