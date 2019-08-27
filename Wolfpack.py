@@ -296,8 +296,8 @@ class Wolfpack(object):
             self.RGB_grid[coord[0]][coord[1]] = [255, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 0, 0]
 
-        #self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
-        #                          for (px, py) in self.player_positions]
+        self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in self.player_positions]
         self.remaining_timesteps = self.max_time_steps
 
         return [self.observation_computation(obs_type, agent_id=id) for id, obs_type in
@@ -970,6 +970,7 @@ if __name__ == '__main__':
             #player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
+
             dones = [obs[2] for obs in player_obs]
             player.set_next_state(env_obs, rewards, dones)
 
