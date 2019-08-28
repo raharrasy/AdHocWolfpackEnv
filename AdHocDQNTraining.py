@@ -956,7 +956,7 @@ if __name__ == '__main__':
     scheduler = OpenScheduler(4, arguments['add_rate'], arguments['del_rate'])
     env = AdHocWolfpack(25, 25, agent=player, args=arguments,
                             num_players=arguments['num_predators'], max_food_num=arguments['num_food'],
-                            max_time_steps=arguments['episode_length'], scheduler=scheduler, with_vis=True)
+                            max_time_steps=arguments['episode_length'], scheduler=scheduler, with_vis=False)
     env.load_map('level_1.pkl')
     # Setup
 
@@ -968,13 +968,13 @@ if __name__ == '__main__':
         num_timesteps = 0
         env_obs = [env.reset()]
         player.reset(env_obs)
-        env.render()
+        #env.render()
         done = False
         total_update_time = 0
         while not done:
             player_act = player.step(env_obs)
             player_obs = env.step(player_act)
-            env.render()
+            #env.render()
             next_obs = [player_obs[0]]
             rewards = [player_obs[1]]
             dones = [player_obs[2]]
