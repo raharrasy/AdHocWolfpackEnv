@@ -5,8 +5,8 @@ import pickle as pkl
 import argparse
 import torch
 from Agent import *
-import pygame
-import ray
+#import pygame
+#import ray
 from QNetwork import *
 
 # import ray
@@ -925,7 +925,7 @@ parser.add_argument('--add_rate', type=float,default=0.05,help="agent added rate
 parser.add_argument('--del_rate', type=float,default=0.05,help="agent deletion rate")
 parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
-parser.add_argument('--max_seq_length', type=int, default=10, help="length of training sequence")
+parser.add_argument('--max_seq_length', type=int, default=5, help="length of training sequence")
 parser.add_argument('--maddpg_max_seq_length', type=int, default=10, help="length of state sequence")
 
 
@@ -986,7 +986,9 @@ if __name__ == '__main__':
             num_timesteps += 1
             total_timesteps += 1
             if total_timesteps % arguments['update_frequency'] == 0:
+                print("Update commencing!")
                 player.update()
+                torch.cuda.empty_cache()
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", str(end-start), " with total update time : ", str(total_update_time))

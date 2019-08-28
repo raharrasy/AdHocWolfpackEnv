@@ -396,8 +396,9 @@ class DQNAgent(Agent):
         if self.args['with_gpu']:
             self.dqn_net.cuda()
             self.dqn_net.device = "cuda:0"
-            self.target_dqn_net.cuda()
-            self.target_dqn_net.device = "cuda:0"
+            if not mode == "test":
+                self.target_dqn_net.cuda()
+                self.target_dqn_net.device = "cuda:0"
 
         self.mode = mode
         if not self.mode == "test":
@@ -831,7 +832,7 @@ class AdHocLearningAgent(Agent):
                                     and i != j]))
 
             new_graph.add_edges(src, dest)
-        new_graph.to(device)
+        #new_graph.to(device)
 
         return new_graph, edge_filters
 
@@ -1224,8 +1225,7 @@ class AdHocDQNAgent(Agent):
 
         batch_graph = dgl.batch(self.obs[0])
         out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
-                                                        self.curr_hidden[0], self.curr_hidden[1],
-                                                self.curr_hidden[2])
+                                                        self.curr_hidden[0], self.curr_hidden[1], self.curr_hidden[2])
 
         self.hidden_edge = e_hid
         self.hidden_node = n_hid
@@ -1243,11 +1243,11 @@ class AdHocDQNAgent(Agent):
         self.next_graph = self.next_obs[0]
         self.prev_hidden = self.curr_hidden
 
-        self.replay_memory.insert((self.obs[1], self.obs[2], self.obs[3], self.graph, self.node_filter,
-                                   self.edge_filter,
+        self.replay_memory.insert((self.obs[1], self.obs[2], self.obs[3], self.graph, self.node_filter.cpu(),
+                                   self.edge_filter.cpu(),
                                    actions, rewards, dones,
                                    self.next_obs[1], self.next_obs[2], self.next_obs[3],
-                                   self.next_graph, self.next_node_filter, self.next_edge_filter))
+                                   self.next_graph, self.next_node_filter.cpu(), self.next_edge_filter.cpu()))
 
         self.curr_hidden = (self.next_obs[4], self.next_obs[5], self.next_obs[6])
 
@@ -1391,7 +1391,7 @@ class AdHocDQNAgent(Agent):
             pred_vals = self.compute_prediction(self.dqn_net, batches[0][0], batches[0][1],
                                                 batches[0][2], batches[0][3], batches[0][4], batches[0][5],
                                                 batches[1]).gather(1,
-                                                torch.Tensor(batches[0][6]).long().to(self.device)[:,None])
+                                                torch.Tensor(batches[0][6]).long()[:,None])
             target_vals = self.compute_prediction(self.target_dqn_net, batches[0][9], batches[0][10],
                                                 batches[0][11], batches[0][12], batches[0][13], batches[0][14],
                                                 batches[1]).max(1)[0][:,None]
@@ -1438,26 +1438,26 @@ class AdHocDQNAgent(Agent):
                                          torch.zeros([1,1, 10]).to(self.device))
             else:
                 for idx, edge_num in enumerate(batch_graph.batch_num_edges):
-                    filtered_hids = (prev_hidden_e[idx][0].gather(1, batch_edge_filters[idx].long()[None,
+                    filtered_hids = (prev_hidden_e[idx][0].gather(1, batch_edge_filters[idx].long().to(self.device)[None,
                                                                            :, None].repeat(1, 1, self.dim_lstm_out)),
-                           prev_hidden_e[idx][1].gather(1, batch_edge_filters[idx].long()[None,
+                           prev_hidden_e[idx][1].gather(1, batch_edge_filters[idx].long().to(self.device)[None,
                                                            :, None].repeat(1, 1, self.dim_lstm_out)))
 
                     prev_hidden_e[idx] = (torch.cat([filtered_hids[0],
-                                                     torch.zeros([1, edge_num-filtered_hids[0].shape[1],10])], dim = 1),
+                                                     torch.zeros([1, edge_num-filtered_hids[0].shape[1],10]).to(self.device)], dim = 1),
                                           torch.cat([filtered_hids[1],
-                                                     torch.zeros([1, edge_num-filtered_hids[1].shape[1], 10])], dim=1))
+                                                     torch.zeros([1, edge_num-filtered_hids[1].shape[1], 10]).to(self.device)], dim=1))
 
                 for idx, node_num in enumerate(batch_graph.batch_num_nodes):
-                    filtered_hids = (prev_hidden_n[idx][0].gather(1, batch_node_filters[idx].long()[None,
+                    filtered_hids = (prev_hidden_n[idx][0].gather(1, batch_node_filters[idx].long().to(self.device)[None,
                                                                            :, None].repeat(1, 1, self.dim_lstm_out)),
-                           prev_hidden_n[idx][1].gather(1, batch_node_filters[idx].long()[None,
+                           prev_hidden_n[idx][1].gather(1, batch_node_filters[idx].long().to(self.device)[None,
                                                            :, None].repeat(1, 1, self.dim_lstm_out)))
 
                     prev_hidden_n[idx] = (torch.cat([filtered_hids[0],
-                                                     torch.zeros([1, node_num-filtered_hids[0].shape[1],10])], dim = 1),
+                                                     torch.zeros([1, node_num-filtered_hids[0].shape[1],10]).to(self.device)], dim = 1),
                                           torch.cat([filtered_hids[1],
-                                                     torch.zeros([1, node_num-filtered_hids[1].shape[1], 10])], dim=1))
+                                                     torch.zeros([1, node_num-filtered_hids[1].shape[1], 10]).to(self.device)], dim=1))
 
 
 
@@ -1467,7 +1467,7 @@ class AdHocDQNAgent(Agent):
 
             out, e_hid, n_hid, u_hid = model(batch_graph, batch_edge_feat, batch_node_feat,
                                                     batch_u_feat, hid_es, hid_ns, hid_us)
-            output[:pack_index[pointer]] = out
+            output[:pack_index[pointer]] = out.cpu()
             prev_hidden_e[:pack_index[pointer]]= e_hid
             prev_hidden_n[:pack_index[pointer]] = n_hid
             u_temp = list(zip(u_hid[0][0],u_hid[1][0]))
