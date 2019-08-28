@@ -1243,10 +1243,10 @@ class AdHocDQNAgent(Agent):
         self.next_graph = self.next_obs[0]
         self.prev_hidden = self.curr_hidden
 
-        self.replay_memory.insert((self.obs[1], self.obs[2], self.obs[3], self.graph, self.node_filter.cpu(),
+        self.replay_memory.insert((self.obs[1].cpu(), self.obs[2].cpu(), self.obs[3].cpu(), self.graph, self.node_filter.cpu(),
                                    self.edge_filter.cpu(),
                                    actions, rewards, dones,
-                                   self.next_obs[1], self.next_obs[2], self.next_obs[3],
+                                   self.next_obs[1].cpu(), self.next_obs[2].cpu(), self.next_obs[3].cpu(),
                                    self.next_graph, self.next_node_filter.cpu(), self.next_edge_filter.cpu()))
 
         self.curr_hidden = (self.next_obs[4], self.next_obs[5], self.next_obs[6])
@@ -1391,13 +1391,12 @@ class AdHocDQNAgent(Agent):
             pred_vals = self.compute_prediction(self.dqn_net, batches[0][0], batches[0][1],
                                                 batches[0][2], batches[0][3], batches[0][4], batches[0][5],
                                                 batches[1]).gather(1,
-                                                torch.Tensor(batches[0][6]).long()[:,None])
+                                                torch.Tensor(batches[0][6]).long().to(self.device)[:,None])
             target_vals = self.compute_prediction(self.target_dqn_net, batches[0][9], batches[0][10],
                                                 batches[0][11], batches[0][12], batches[0][13], batches[0][14],
                                                 batches[1]).max(1)[0][:,None]
             done_tensor = torch.Tensor(batches[0][8]).to(self.device)[:,None]
-            target_vals = torch.Tensor(batches[0][7]).to(self.device)[:,None] + \
-                          self.args['disc_rate'] * (1-done_tensor) * target_vals
+            target_vals = torch.Tensor(batches[0][7]).to(self.device)[:,None] + self.args['disc_rate'] * (1-done_tensor) * target_vals
 
             loss = self.loss_module(pred_vals, target_vals.detach())
             loss.backward()
@@ -1418,10 +1417,10 @@ class AdHocDQNAgent(Agent):
         while pointer < len(pack_index) and pack_index[pointer] != 0:
             # Unpack data
             batch_edge_feat = torch.cat([data[0][pointer] for
-                                            data in zipped_inputs[:pack_index[pointer]]], dim=0)
+                                            data in zipped_inputs[:pack_index[pointer]]], dim=0).to(self.device)
             batch_node_feat = torch.cat([data[1][pointer] for
-                                         data in zipped_inputs[:pack_index[pointer]]], dim=0)
-            batch_u_feat = torch.cat([data[2][pointer] for data in zipped_inputs[:pack_index[pointer]]])
+                                         data in zipped_inputs[:pack_index[pointer]]], dim=0).to(self.device)
+            batch_u_feat = torch.cat([data[2][pointer] for data in zipped_inputs[:pack_index[pointer]]]).to(self.device)
             batch_graph = dgl.batch([data[3][pointer][0] for data in zipped_inputs[:pack_index[pointer]]])
             batch_edge_filters = [data[4][pointer] for data in zipped_inputs[:pack_index[pointer]]]
             batch_node_filters = [data[5][pointer] for data in zipped_inputs[:pack_index[pointer]]]
@@ -1467,7 +1466,7 @@ class AdHocDQNAgent(Agent):
 
             out, e_hid, n_hid, u_hid = model(batch_graph, batch_edge_feat, batch_node_feat,
                                                     batch_u_feat, hid_es, hid_ns, hid_us)
-            output[:pack_index[pointer]] = out.cpu()
+            output[:pack_index[pointer]] = out
             prev_hidden_e[:pack_index[pointer]]= e_hid
             prev_hidden_n[:pack_index[pointer]] = n_hid
             u_temp = list(zip(u_hid[0][0],u_hid[1][0]))

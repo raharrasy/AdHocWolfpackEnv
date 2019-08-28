@@ -892,7 +892,7 @@ parser.add_argument('--num_predators', type=int, default=2, help='number of pred
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
 parser.add_argument('--max_bptt_length', type=int, default=20, help="length of state sequence")
 parser.add_argument('--num_episodes', type=int, default=2500, help="Number of episodes for training")
-parser.add_argument('--update_frequency', type=int, default=50, help="Timesteps between updates")
+parser.add_argument('--update_frequency', type=int, default=32, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--anneal_end', type=int, default=4000, help="Number of episodes until linear annealing stops")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
