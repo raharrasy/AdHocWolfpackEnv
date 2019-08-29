@@ -642,7 +642,12 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
                                                                                updated_e_feat, updated_n_feat,
                                                                                updated_u_feat)
 
-        inp = updated_u_feat
+        #inp = updated_u_feat
+        zero_indexes = [0]
+        for a in range(len(graph.batch_num_nodes)-1):
+            zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a+1])
+
+        inp = updated_n_feat[zero_indexes]
 
         if not self.with_rfm:
             out = self.q_net(F.relu(self.pre_q_net(inp)))

@@ -719,10 +719,6 @@ class Wolfpack(object):
             food_list = []
             for a in oppo_positions:
                 food_list.extend(list(a))
-            food_list.extend(list(positions[0]))
-            player_orient = [0]*4
-            player_orient[orientation[0]] = 1
-            food_list.extend(player_orient)
 
             return pos_list, prob_state, self.masking, self.prev_added, food_list
 
@@ -967,7 +963,7 @@ if __name__ == '__main__':
     arguments = vars(args)
     machine_ip = get_ip()
 
-    player = AdHocShortBPTTAgent(args=arguments, agent_id=0, with_added_u=True, added_u_dim=10)
+    player = AdHocShortBPTTAgent(args=arguments, agent_id=0, with_added_u=True, added_u_dim=4)
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
