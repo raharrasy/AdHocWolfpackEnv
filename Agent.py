@@ -27,6 +27,7 @@ class Agent(object):
 class RandomAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(RandomAgent, self).__init__(agent_id, obs_type)
+        self.color = (148, 0, 211)
 
     def act(self, obs=None):
         return random.randint(0, 6)
@@ -35,6 +36,7 @@ class RandomAgent(Agent):
 class GreedyPredatorAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyPredatorAgent, self).__init__(agent_id, obs_type)
+        self.color = (51, 255, 51)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -139,6 +141,7 @@ class GreedyPredatorAgent(Agent):
 class GreedyProbabilisticAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyProbabilisticAgent, self).__init__(agent_id, obs_type)
+        self.color = (255, 51, 153)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -256,6 +259,7 @@ class GreedyProbabilisticAgent(Agent):
 class TeammateAwarePredator(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(TeammateAwarePredator, self).__init__(agent_id, obs_type)
+        self.color = (0, 255, 0)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -384,6 +388,7 @@ class DQNAgent(Agent):
         super(DQNAgent, self).__init__(agent_id, obs_type)
         self.obs_type = obs_type
         self.args = args
+        self.color = (255, 0, 0)
         self.experience_replay = ReplayMemoryLite(state_h=obs_height, state_w=obs_width,
                                                   with_gpu=self.args['with_gpu'])
         self.dqn_net = DQN(17,9,32,self.args['max_seq_length'],7, mode="partial")
@@ -453,6 +458,7 @@ class DistilledCoopAStarAgent(object):
         self.agent_id = id
         self.obs_type = obs_type
         self.dqn_net = GraphOppoModel(6, 0, 50, 4, 40, 20, 30, 10, 15, 7)
+        self.color = (255, 128, 0)
         self.load_params("assets/distilled_teamwork_net/distilled_net.pkl")
 
     def load_params(self, dir):
@@ -489,6 +495,7 @@ class MADDPGAgent(Agent):
         self.obs_type = obs_type
         self.mode = mode
         self.max_seq_length = max_seq_length
+        self.color = (155, 204, 255)
         self.with_gpu = with_gpu
 
         self.dqn_net = MADDPGDQN(25,25,32,self.max_seq_length,7, mode="full",
@@ -551,6 +558,7 @@ class AdHocLearningAgent(Agent):
                  mode="train", device=None):
         super(AdHocLearningAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
         self.args = args
+        self.color = (255, 255, 0)
 
         # Initialize neural network dimensions
         self.dim_lstm_out = 10
@@ -884,6 +892,7 @@ class AdHocShortBPTTAgent(Agent):
         self.args = args
         self.with_added_u = with_added_u
         self.added_u_dim = added_u_dim
+        self.color = (255, 255, 0)
 
         # Initialize neural network dimensions
         self.dim_lstm_out = 30
