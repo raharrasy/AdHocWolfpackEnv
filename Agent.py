@@ -27,6 +27,7 @@ class Agent(object):
 class RandomAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(RandomAgent, self).__init__(agent_id, obs_type)
+        self.color = (148, 0, 211)
 
     def act(self, obs=None):
         return random.randint(0, 6)
@@ -35,6 +36,7 @@ class RandomAgent(Agent):
 class GreedyPredatorAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyPredatorAgent, self).__init__(agent_id, obs_type)
+        self.color = (51, 255, 51)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -139,6 +141,7 @@ class GreedyPredatorAgent(Agent):
 class GreedyProbabilisticAgent(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(GreedyProbabilisticAgent, self).__init__(agent_id, obs_type)
+        self.color = (255, 51, 153)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -256,6 +259,7 @@ class GreedyProbabilisticAgent(Agent):
 class TeammateAwarePredator(Agent):
     def __init__(self, agent_id, obs_type="comp_processed"):
         super(TeammateAwarePredator, self).__init__(agent_id, obs_type)
+        self.color = (0, 255, 0)
 
     def act(self, obs):
         agent_pos = obs[0][self.agent_id]
@@ -384,6 +388,7 @@ class DQNAgent(Agent):
         super(DQNAgent, self).__init__(agent_id, obs_type)
         self.obs_type = obs_type
         self.args = args
+        self.color = (255, 0, 0)
         self.experience_replay = ReplayMemoryLite(state_h=obs_height, state_w=obs_width,
                                                   with_gpu=self.args['with_gpu'])
         self.dqn_net = DQN(17,9,32,self.args['max_seq_length'],7, mode="partial")
@@ -452,6 +457,7 @@ class DistilledCoopAStarAgent(object):
     def __init__(self, id, obs_type="full_rgb_graph"):
         self.agent_id = id
         self.obs_type = obs_type
+        self.color = (255, 128, 0)
         self.dqn_net = GraphOppoModel(6, 0, 50, 4, 40, 20, 30, 10, 15, 7)
         self.load_params("assets/distilled_teamwork_net/distilled_net.pkl")
 
@@ -490,6 +496,7 @@ class MADDPGAgent(Agent):
         self.mode = mode
         self.max_seq_length = max_seq_length
         self.with_gpu = with_gpu
+        self.color = (155, 204, 255)
 
         self.dqn_net = MADDPGDQN(25,25,32,self.max_seq_length,7, mode="full",
                       extended_feature_len = 6)
@@ -555,6 +562,7 @@ class AdHocLearningAgent(Agent):
         # Initialize neural network dimensions
         self.dim_lstm_out = 10
         self.device = device
+        self.color = (255, 255, 0)
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.dqn_net = AdHocWolfpackGNN(6, 0, 20, 40, 20, 30, 15,
@@ -884,6 +892,7 @@ class AdHocShortBPTTAgent(Agent):
         self.args = args
         self.with_added_u = with_added_u
         self.added_u_dim = added_u_dim
+        self.color = (255, 255, 0)
 
         # Initialize neural network dimensions
         self.dim_lstm_out = 30
@@ -974,11 +983,14 @@ class AdHocShortBPTTAgent(Agent):
                                                     self.curr_hidden[0], self.curr_hidden[1],
                                                     self.curr_hidden[2], self.obs[7])
 
+        print(out)
+
         self.hidden_edge = e_hid
         self.hidden_node = n_hid
         self.hidden_u = list(zip([hid[None,None,:] for hid in u_hid[0][0]], [hid[None,None,:] for hid in u_hid[1][0]]))
 
         act = torch.argmax(out, dim=-1)
+        print(act)
         act = [a.item() if random.random() > self.epsilon else
                random.randint(0, 6) for a in act]
         self.predicted_vals.append(out.gather(1, torch.Tensor(act).long().to(self.device)[:, None]))

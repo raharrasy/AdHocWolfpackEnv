@@ -644,18 +644,20 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
 
         #inp = updated_u_feat
         zero_indexes = [0]
+        #print(graph.batch_num_nodes)
         for a in range(len(graph.batch_num_nodes)-1):
-            zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a+1])
+            zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a])
 
+        #print(zero_indexes)
         inp = updated_n_feat[zero_indexes]
 
         if not self.with_rfm:
+            #print("Fin relu out : ",F.relu(self.pre_q_net(inp)))
             out = self.q_net(F.relu(self.pre_q_net(inp)))
         else:
             edges = graph.edges()
             reverse_feats = e_feat[graph.edge_ids(edges[1],edges[0])]
             out = self.q_net(graph, e_feat, n_feat, u_out, reverse_feats)
-
         return out, e_hid, n_hid, u_hid
 
 class GraphOppoModel(nn.Module):
