@@ -645,7 +645,7 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
         #inp = updated_u_feat
         zero_indexes = [0]
         for a in range(len(graph.batch_num_nodes)-1):
-            zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a+1])
+            zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a])
 
         inp = updated_n_feat[zero_indexes]
 
