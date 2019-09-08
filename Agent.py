@@ -900,11 +900,11 @@ class AdHocShortBPTTAgent(Agent):
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
-                                        10, 20, 7, with_rfm = False,
+                                        10, 20, 5, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
                                         added_u_feat_dim=self.added_u_dim).to(self.device)
         self.target_dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
-                                        10, 20, 7, with_rfm = False,
+                                        10, 20, 5, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
                                         added_u_feat_dim=self.added_u_dim).to(self.device)
         hard_copy(self.target_dqn_net,  self.dqn_net)
@@ -992,7 +992,7 @@ class AdHocShortBPTTAgent(Agent):
         act = torch.argmax(out, dim=-1)
         print(act)
         act = [a.item() if random.random() > self.epsilon else
-               random.randint(0, 6) for a in act]
+               random.randint(0, 4) for a in act]
         self.predicted_vals.append(out.gather(1, torch.Tensor(act).long().to(self.device)[:, None]))
 
         return act

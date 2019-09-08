@@ -465,7 +465,7 @@ class Wolfpack(object):
         cur_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in food_locations])
                                   for (px, py) in self.player_positions]
 
-        self.player_points = [0.05 * (prev_dist-cur_dist)
+        self.player_points = [0.2 * (prev_dist-cur_dist)
                               for prev_dist, cur_dist in zip(self.prev_dist_to_food, cur_dist_to_food)]
         self.prev_dist_to_food = cur_dist_to_food
 
@@ -913,7 +913,7 @@ parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
-parser.add_argument('--num_episodes', type=int, default=5000, help="Number of episodes for training")
+parser.add_argument('--num_episodes', type=int, default=6000, help="Number of episodes for training")
 parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
@@ -982,13 +982,15 @@ if __name__ == '__main__':
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
         player.reset(env_obs)
-        player.set_epsilon(max(1.0-((eps_index+1.0)/3500.0), 0.05))
+        player.set_epsilon(max(1.0-((eps_index+1.0)/4500.0), 0.05))
         done = False
+        total_rewards = 0.0
         while not done:
             player_acts = player.step(env_obs)
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
+            total_rewards += (sum(rewards)+0.0)/len(rewards)
             dones = [obs[2] for obs in player_obs]
             player.set_next_state(env_obs, rewards, dones)
 
@@ -998,7 +1000,7 @@ if __name__ == '__main__':
                 player.update()
 
         end = timeit.default_timer()
-        print("Eps Done!!! Took these seconds : ", end-start)
+        print("Eps Done!!! Took these seconds : ", end-start, " with total rewards : ", total_rewards)
         if (eps_index+1)%arguments['saving_frequency'] == 0:
             player.save_parameters("parameters_dense/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
