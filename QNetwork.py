@@ -594,10 +594,12 @@ class AdHocWolfpackGNN(nn.Module):
 class AdHocWolfpackGNNLSTMFirst(nn.Module):
     def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_lstm_out, dim_mid, dim_out,
                  fin_mid_dim, act_dims, with_added_u_feat=False, added_u_feat_dim=0,
-                 with_rfm=False):
+                 with_rfm=False, with_rgb=False):
         super(AdHocWolfpackGNNLSTMFirst, self).__init__()
         self.dim_lstm_out = dim_lstm_out
-        self.MapCNN = MapProcessor(25,25, dim_in_u)
+        self.with_rgb = with_rgb
+        if self.with_rgb:
+            self.MapCNN = MapProcessor(25,25, dim_in_u)
         self.with_added_u_feat = with_added_u_feat
         if not self.with_added_u_feat:
             self.GraphLSTM = GraphLSTM(dim_lstm_out+ dim_in_node + dim_in_u,
@@ -627,9 +629,12 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
 
     def forward(self, graph, edge_feat, node_feat, u_obs, hidden_e, hidden_n, hidden_u, added_u_feat=None):
 
-        g_repr = self.MapCNN.forward(u_obs)
+        if self.with_rgb:
+            g_repr = self.MapCNN.forward(u_obs)
+        else:
+            g_repr = u_obs
 
-        if self.with_added_u_feat:
+        if self.with_added_u_feat and self.with_rgb:
             g_repr = torch.cat([g_repr, added_u_feat], dim=-1)
 
         e_feat, e_hid, n_feat, n_hid, u_out, u_hid = self.GraphLSTM.forward(graph, edge_feat, node_feat, g_repr,

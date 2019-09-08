@@ -191,11 +191,14 @@ class OpenScheduler(object):
 class Wolfpack(object):
     def __init__(self, grid_height, grid_width, agent_list, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None, seed=1000):
         self.grid_height = grid_height
         self.grid_width = grid_width
         self.scheduler = scheduler
         self.agent_list = agent_list
+        self.seed=seed
+        self.randomizer = random
+        self.randomizer.seed(self.seed)
 
         self.sight_sideways = sight_sideways
         self.sight_radius = sight_radius
@@ -207,14 +210,16 @@ class Wolfpack(object):
         self.grid = [[0 for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.RGB_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.num_players = num_players
+        self.num_teammates = num_players
         self.max_food_num = max_food_num
         self.max_time_steps = max_time_steps
         self.food_freeze_rate = food_freeze_rate
 
-        app = Generator((self.grid_width, self.grid_height), 7, 8)
-        app.initialiseMap()
-        app.simulate(2)
-        self.levelMap = app.booleanMap
+        #app = Generator((self.grid_width, self.grid_height), 7, 8)
+        #app.initialiseMap()
+        #app.simulate(2)
+        #self.levelMap = app.booleanMap
+        self.levelMap = [[False] * k for k in [self.grid_width] * self.grid_height]
         #self.visualizer = Visualizer(self.grid, self.grid_height, self.grid_width)
 
         self.obstacleCoord = [(iy, ix) for ix, row in enumerate(self.levelMap) for iy, i in enumerate(row) if i]
@@ -722,13 +727,30 @@ class Wolfpack(object):
 
             return pos_list, prob_state, self.masking, self.prev_added, food_list
 
+        elif obs_type == "ad_hoc_obs_no_rgb":
+            orientation = self.player_orientation
+            positions = self.player_positions
+
+            pos_list = [list(pos_data) for pos_data in positions]
+            for pos, ord in zip(pos_list, orientation):
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
+
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
+
+            return pos_list, self.masking, self.prev_added, food_list
+
         # elif obs_type == "centralized_decentralized":
 
     def add_agent(self, new_agent, new_types):
         def_orientation = 0
         available_pos = list(set(self.possibleCoordinates) - set(self.player_positions) -
                              set(self.food_positions))
-        pos_idxes = random.sample(list(range(len(available_pos))), k=len(new_agent))
+        pos_idxes = self.randomizer.sample(list(range(len(available_pos))), k=len(new_agent))
         added_pos = [available_pos[a] for a in pos_idxes]
         orientation = [def_orientation for _ in range(len(added_pos))]
         added_cur_dis = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
@@ -791,10 +813,15 @@ class Wolfpack(object):
         self.food_obs_type = list_obs
 
     def sample_init_players(self):
-        num_sampled = random.randint(1, 4)
-        all_agent_types = [RandomAgent, GreedyPredatorAgent]
-        agent_inits = [all_agent_types[random.randint(0, len(all_agent_types) - 1)](idx + 1)
+        #num_sampled = random.randint(1, 4)
+        num_sampled = self.num_teammates
+        #all_agent_types = [RandomAgent, GreedyPredatorAgent]
+        #all_agent_types = [GreedyProbabilisticAgent]
+        all_agent_types = [RandomAgent, GreedyPredatorAgent, GreedyProbabilisticAgent,
+                           TeammateAwarePredator, DistilledCoopAStarAgent, MADDPGAgent]
+        agent_inits = [all_agent_types[self.randomizer.randint(0, len(all_agent_types) - 1)](idx + 1)
                        for idx in range(num_sampled)]
+        #agent_inits = [RandomAgent(1), GreedyProbabilisticAgent(2)]
         return agent_inits
 
     #def render(self):
@@ -808,12 +835,13 @@ class Wolfpack(object):
 class AdHocWolfpack(Wolfpack):
     def __init__(self, grid_height, grid_width, agent, args= None, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None, seed=1000):
         self.agent = agent
         agent_list = [agent]
         Wolfpack.__init__(self, grid_height, grid_width, agent_list, sight_sideways,
                  sight_radius, num_players, max_food_num, food_freeze_rate,
-                 max_time_steps, coop_radius, groupMultiplier, scheduler)
+                 max_time_steps, coop_radius, groupMultiplier, scheduler, seed)
+
 
         self.args = args
         self.food_list = None
@@ -913,17 +941,17 @@ parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
-parser.add_argument('--num_episodes', type=int, default=6000, help="Number of episodes for training")
-parser.add_argument('--update_frequency', type=int, default=15, help="Timesteps between updates")
+parser.add_argument('--num_episodes', type=int, default=800, help="Number of episodes for training")
+parser.add_argument('--update_frequency', type=int, default=10, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
-parser.add_argument('--saving_frequency', type=int,default=100,help="saving frequency")
+parser.add_argument('--saving_frequency', type=int,default=40,help="saving frequency")
 parser.add_argument('--obs_height', type=int,default=9,help="observation_height")
 parser.add_argument('--obs_width', type=int,default=17,help="observation_width")
 parser.add_argument('--obs_type', type=str,default="partial_obs",help="observation type")
 parser.add_argument('--with_gpu', type=bool,default=False,help="with gpu")
-parser.add_argument('--add_rate', type=float,default=0.05,help="agent added rate")
-parser.add_argument('--del_rate', type=float,default=0.05,help="agent deletion rate")
+parser.add_argument('--add_rate', type=float,default=0.00,help="agent added rate")
+parser.add_argument('--del_rate', type=float,default=0.00,help="agent deletion rate")
 parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
 parser.add_argument('--max_seq_length', type=int, default=5, help="length of state sequence")
@@ -936,11 +964,11 @@ def create_parallel_env(args, player, num_envs):
     schedulers = [OpenScheduler(4, args['add_rate'], args['del_rate']) for _ in range(num_envs)]
     envs = [AdHocWolfpack.remote(25, 25, agent=player, args=args,
                            num_players=args['num_predators'], max_food_num=args['num_food'],
-                           max_time_steps=args['episode_length'], scheduler=scheduler) for scheduler
-                    in schedulers]
+                           max_time_steps=args['episode_length'], scheduler=scheduler, seed=idx*1000) for idx, scheduler
+                    in enumerate(schedulers)]
 
-    for env in envs:
-        env.load_map.remote('level_1.pkl')
+    #for env in envs:
+    #    env.load_map.remote('level_1.pkl')
 
     return envs
 
@@ -957,16 +985,17 @@ def get_ip():
     return IP
 
 if __name__ == '__main__':
-    add_rate = 0.05
-    rem_rate = 0.05
     torch.set_num_threads(1)
     arguments = vars(args)
     machine_ip = get_ip()
 
     player = AdHocShortBPTTAgent(args=arguments, agent_id=0, with_added_u=True, added_u_dim=4)
+    #player.load_parameters("paramsAdhoc/params_20")
+    #player = GreedyPredatorAgent(agent_id=0)
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
+    torch.set_num_threads(1)
 
     ray.init(object_store_memory=int(1e9))
     #os.system("ray start --head --redis-port 8989 --object-store-memory 1000000000")
@@ -982,12 +1011,15 @@ if __name__ == '__main__':
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
         player.reset(env_obs)
-        player.set_epsilon(max(1.0-((eps_index+1.0)/4500.0), 0.05))
+        player.set_epsilon(max(1.0-((eps_index+1.0)/600.0), 0.05))
+        #player.set_epsilon(0.0)
         done = False
         total_rewards = 0.0
         while not done:
             player_acts = player.step(env_obs)
+            #player_acts = [player.act(obs) for obs in env_obs]
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
+
             env_obs = [obs[0] for obs in player_obs]
             rewards = [obs[1] for obs in player_obs]
             total_rewards += (sum(rewards)+0.0)/len(rewards)
@@ -996,13 +1028,13 @@ if __name__ == '__main__':
 
             done = dones[0]
             num_timesteps += 1
-            if num_timesteps % 15 == 0 or done:
+            if num_timesteps % 10 == 0 or done:
                 player.update()
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", end-start, " with total rewards : ", total_rewards)
         if (eps_index+1)%arguments['saving_frequency'] == 0:
-            player.save_parameters("parameters_dense/params_"+str((eps_index+1)//arguments['saving_frequency']))
+            player.save_parameters("paramsAdhoc/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
 # if __name__ == "__main__":
 #     num_players = 8

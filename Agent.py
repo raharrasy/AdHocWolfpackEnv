@@ -886,28 +886,30 @@ class AdHocLearningAgent(Agent):
         self.target_vals = []
 
 class AdHocShortBPTTAgent(Agent):
-    def __init__(self, agent_id=0, args=None, obs_type="adhoc_obs", rollout_freq=8, back_prop_len=12, optimizer=None,
-                 mode="train", device=None, epsilon=1.0, with_added_u=False, added_u_dim=0):
+    def __init__(self, agent_id=0, args=None, obs_type="ad_hoc_obs_no_rgb", rollout_freq=8, back_prop_len=12,
+                 optimizer=None,
+                 mode="train", device=None, epsilon=1.0, with_rgb=False, with_added_u=False, added_u_dim=0):
         super(AdHocShortBPTTAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
         self.args = args
         self.with_added_u = with_added_u
         self.added_u_dim = added_u_dim
         self.color = (255, 255, 0)
+        self.with_rgb = with_rgb
 
         # Initialize neural network dimensions
         self.dim_lstm_out = 30
         self.device = device
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
+        self.dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 0, 40, 20, 30, 15,
                                         10, 20, 5, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
-                                        added_u_feat_dim=self.added_u_dim).to(self.device)
-        self.target_dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 20, 40, 20, 30, 15,
+                                        added_u_feat_dim=self.added_u_dim, with_rgb = with_rgb).to(self.device)
+        self.target_dqn_net = AdHocWolfpackGNNLSTMFirst(6, 0, 0, 40, 20, 30, 15,
                                         10, 20, 5, with_rfm = False,
                                         with_added_u_feat=self.with_added_u,
-                                        added_u_feat_dim=self.added_u_dim).to(self.device)
-        hard_copy(self.target_dqn_net,  self.dqn_net)
+                                        added_u_feat_dim=self.added_u_dim, with_rgb=with_rgb).to(self.device)
+        hard_copy(self.target_dqn_net, self.dqn_net)
         self.mode = mode
 
         # Initialize hidden states of prediction
@@ -952,14 +954,19 @@ class AdHocShortBPTTAgent(Agent):
             target_obs = self.prep_obs(obs, self.target_hidden_edge,
                                             self.target_hidden_node, self.target_hidden_u)
             target_batch_graph = dgl.batch(target_obs[0])
-            if not self.with_added_u:
-                _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
-                                                               target_obs[3], target_obs[4], target_obs[5],
-                                                               target_obs[6])
+            if self.with_rgb:
+                if not self.with_added_u:
+                    _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+                                                                   target_obs[3], target_obs[4], target_obs[5],
+                                                                   target_obs[6])
+                else:
+                    _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+                                                                       target_obs[3], target_obs[4], target_obs[5],
+                                                                       target_obs[6], target_obs[7])
             else:
                 _, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
                                                                    target_obs[3], target_obs[4], target_obs[5],
-                                                                   target_obs[6], target_obs[7])
+                                                                   target_obs[6])
 
             self.target_hidden_edge = t_e_hid
             self.target_hidden_node = t_n_hid
@@ -974,23 +981,26 @@ class AdHocShortBPTTAgent(Agent):
             self.curr_hidden = (self.obs[4], self.obs[5], self.obs[6])
 
         batch_graph = dgl.batch(self.obs[0])
-        if not self.with_added_u:
-            out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
+        if self.with_rgb :
+            if not self.with_added_u:
+                out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph,self.obs[1], self.obs[2], self.obs[3],
+                                                            self.curr_hidden[0], self.curr_hidden[1],
+                                                    self.curr_hidden[2])
+            else:
+                out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph, self.obs[1], self.obs[2], self.obs[3],
                                                         self.curr_hidden[0], self.curr_hidden[1],
-                                                self.curr_hidden[2])
+                                                        self.curr_hidden[2], self.obs[7])
         else:
             out, e_hid, n_hid, u_hid = self.dqn_net(batch_graph, self.obs[1], self.obs[2], self.obs[3],
                                                     self.curr_hidden[0], self.curr_hidden[1],
-                                                    self.curr_hidden[2], self.obs[7])
+                                                    self.curr_hidden[2])
 
-        print(out)
 
         self.hidden_edge = e_hid
         self.hidden_node = n_hid
         self.hidden_u = list(zip([hid[None,None,:] for hid in u_hid[0][0]], [hid[None,None,:] for hid in u_hid[1][0]]))
 
         act = torch.argmax(out, dim=-1)
-        print(act)
         act = [a.item() if random.random() > self.epsilon else
                random.randint(0, 4) for a in act]
         self.predicted_vals.append(out.gather(1, torch.Tensor(act).long().to(self.device)[:, None]))
@@ -1010,14 +1020,19 @@ class AdHocShortBPTTAgent(Agent):
         target_obs = self.prep_obs(next_obs, self.target_hidden_edge,
                                        self.target_hidden_node, self.target_hidden_u)
         target_batch_graph = dgl.batch(target_obs[0])
-        if not self.with_added_u:
-            targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
-                                                               target_obs[3], target_obs[4], target_obs[5],
-                                                               target_obs[6])
+        if self.with_rgb:
+            if not self.with_added_u:
+                targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+                                                                   target_obs[3], target_obs[4], target_obs[5],
+                                                                   target_obs[6])
+            else:
+                targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
+                                                                          target_obs[3], target_obs[4], target_obs[5],
+                                                                          target_obs[6], target_obs[7])
         else:
             targ_out, t_e_hid, t_n_hid, t_u_hid = self.target_dqn_net(target_batch_graph, target_obs[1], target_obs[2],
                                                                       target_obs[3], target_obs[4], target_obs[5],
-                                                                      target_obs[6], target_obs[7])
+                                                                      target_obs[6])
 
         targs = torch.max(targ_out, dim=-1)[0][:,None]
         rewards = torch.Tensor(rewards)[:,None].to(self.device)
@@ -1042,54 +1057,104 @@ class AdHocShortBPTTAgent(Agent):
         prep_hidden_e_list = []
         prep_hidden_n_list = []
 
-        for idx, obs in enumerate(obses):
-            if prev_hidden_e[idx] is None:
-                prev_hidden_e[idx] = (torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device),
-                                         torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device))
-            if prev_hidden_n[idx] is None:
-                prev_hidden_n[idx] = (torch.zeros([1, len(obs[2]), 30]).to(self.device),
-                                      torch.zeros([1, len(obs[2]), 30]).to(self.device))
-            if prev_hidden_u[idx] is None:
-                prev_hidden_u[idx] = (torch.zeros([1, 1, 30]).to(self.device),
-                                      torch.zeros([1, 1, 30]).to(self.device))
+        if self.with_rgb :
+            for idx, obs in enumerate(obses):
+                if prev_hidden_e[idx] is None:
+                        prev_hidden_e[idx] = (torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device),
+                                             torch.zeros([1, len(obs[2]) * (len(obs[2]) - 1), 30]).to(self.device))
+                if prev_hidden_n[idx] is None:
+                    prev_hidden_n[idx] = (torch.zeros([1, len(obs[2]), 30]).to(self.device),
+                                          torch.zeros([1, len(obs[2]), 30]).to(self.device))
+                if prev_hidden_u[idx] is None:
+                    prev_hidden_u[idx] = (torch.zeros([1, 1, 30]).to(self.device),
+                                          torch.zeros([1, 1, 30]).to(self.device))
 
-            new_graph, edge_filters = self.create_input_graph(obs[2], obs[3], idx)
-            new_graphs.append(new_graph)
+                new_graph, edge_filters = self.create_input_graph(obs[2], obs[3], idx)
+                new_graphs.append(new_graph)
 
-            # Calculate number of added nodes and new number of nodes
-            added_n, new_node_num = obs[3], new_graph.nodes().shape[0]
-            # Calculate number of nodes after filtering
-            after_delete_node = new_node_num - added_n
-            # Calculate the added number of edges
-            added_e = (new_node_num * (new_node_num - 1)) - (after_delete_node * (after_delete_node - 1))
+                # Calculate number of added nodes and new number of nodes
+                added_n, new_node_num = obs[3], new_graph.nodes().shape[0]
+                # Calculate number of nodes after filtering
+                after_delete_node = new_node_num - added_n
+                # Calculate the added number of edges
+                added_e = (new_node_num * (new_node_num - 1)) - (after_delete_node * (after_delete_node - 1))
 
-            # Prepare hiddens
+                # Prepare hiddens
 
-            # Empty features for edge
-            edge_features = torch.Tensor(size=[new_node_num * (new_node_num - 1), 0]).to(self.device)
-            edge_feature_list.append(edge_features)
-            # Features for nodes
-            node_features = torch.Tensor(obs[0]).to(self.device)
-            node_feature_list.append(node_features)
-            # Use image as features for graph
-            u_features = torch.Tensor(obs[1]).permute(2, 0, 1)[None, :, :, :].to(self.device)
-            u_feature_list.append(u_features)
+                # Empty features for edge
+                edge_features = torch.Tensor(size=[new_node_num * (new_node_num - 1), 0]).to(self.device)
+                edge_feature_list.append(edge_features)
+                # Features for nodes
+                node_features = torch.Tensor(obs[0]).to(self.device)
+                node_feature_list.append(node_features)
+                # Use image as features for graph
+                u_features = torch.Tensor(obs[1]).permute(2, 0, 1)[None, :, :, :].to(self.device)
+                u_feature_list.append(u_features)
 
-            if self.with_added_u:
-                added_u_features = torch.Tensor([obs[4]]).to(self.device)
-                added_u_feature_list.append(added_u_features)
+                if self.with_added_u:
+                    added_u_features = torch.Tensor([obs[4]]).to(self.device)
+                    added_u_feature_list.append(added_u_features)
 
-            preprocessed_hidden_e = self.prep_hidden(prev_hidden_e[idx], [edge_filters], [added_e])
-            prep_hidden_e_list.append(preprocessed_hidden_e)
-            preprocessed_hidden_n = self.prep_hidden(prev_hidden_n[idx], [torch.Tensor(obs[2]).to(self.device)],
-                                                     [added_n])
-            prep_hidden_n_list.append(preprocessed_hidden_n)
+                preprocessed_hidden_e = self.prep_hidden(prev_hidden_e[idx], [edge_filters], [added_e])
+                prep_hidden_e_list.append(preprocessed_hidden_e)
+                preprocessed_hidden_n = self.prep_hidden(prev_hidden_n[idx], [torch.Tensor(obs[2]).to(self.device)],
+                                                         [added_n])
+                prep_hidden_n_list.append(preprocessed_hidden_n)
+        else:
+            for idx, obs in enumerate(obses):
+                if prev_hidden_e[idx] is None:
+                    prev_hidden_e[idx] = (torch.zeros([1, len(obs[1]) * (len(obs[1]) - 1), 30]).to(self.device),
+                                          torch.zeros([1, len(obs[1]) * (len(obs[1]) - 1), 30]).to(self.device))
+                if prev_hidden_n[idx] is None:
+                    prev_hidden_n[idx] = (torch.zeros([1, len(obs[1]), 30]).to(self.device),
+                                          torch.zeros([1, len(obs[1]), 30]).to(self.device))
+                if prev_hidden_u[idx] is None:
+                    prev_hidden_u[idx] = (torch.zeros([1, 1, 30]).to(self.device),
+                                          torch.zeros([1, 1, 30]).to(self.device))
 
-        e_feat, n_feat, u_feat = torch.cat(edge_feature_list, dim=0), \
+                new_graph, edge_filters = self.create_input_graph(obs[1], obs[2], idx)
+                new_graphs.append(new_graph)
+
+                # Calculate number of added nodes and new number of nodes
+                added_n, new_node_num = obs[2], new_graph.nodes().shape[0]
+                # Calculate number of nodes after filtering
+                after_delete_node = new_node_num - added_n
+                # Calculate the added number of edges
+                added_e = (new_node_num * (new_node_num - 1)) - (after_delete_node * (after_delete_node - 1))
+
+                # Prepare hiddens
+
+                # Empty features for edge
+                edge_features = torch.Tensor(size=[new_node_num * (new_node_num - 1), 0]).to(self.device)
+                edge_feature_list.append(edge_features)
+                # Features for nodes
+                node_features = torch.Tensor(obs[0]).to(self.device)
+                node_feature_list.append(node_features)
+                # Use image as features for graph
+                #u_features = torch.Tensor(obs[1]).permute(2, 0, 1)[None, :, :, :].to(self.device)
+                #u_feature_list.append(u_features)
+
+                if self.with_added_u:
+                    added_u_features = torch.Tensor([obs[3]]).to(self.device)
+                    added_u_feature_list.append(added_u_features)
+
+                preprocessed_hidden_e = self.prep_hidden(prev_hidden_e[idx], [edge_filters], [added_e])
+                prep_hidden_e_list.append(preprocessed_hidden_e)
+                preprocessed_hidden_n = self.prep_hidden(prev_hidden_n[idx], [torch.Tensor(obs[1]).to(self.device)],
+                                                         [added_n])
+                prep_hidden_n_list.append(preprocessed_hidden_n)
+
+        if self.with_rgb:
+            e_feat, n_feat, u_feat = torch.cat(edge_feature_list, dim=0), \
                                  torch.cat(node_feature_list, dim=0), \
                                  torch.cat(u_feature_list, dim=0)
-        if self.with_added_u:
-            added_u_feats = torch.cat(added_u_feature_list, dim=0)
+            if self.with_added_u:
+                added_u_feats = torch.cat(added_u_feature_list, dim=0)
+
+        else:
+            e_feat, n_feat, u_feat = torch.cat(edge_feature_list, dim=0), \
+                                     torch.cat(node_feature_list, dim=0), \
+                                     torch.cat(added_u_feature_list, dim=0)
 
         hid_1_e, hid_2_e = zip(*prep_hidden_e_list)
         hid_e = (torch.cat(hid_1_e, dim=1), torch.cat(hid_2_e, dim=1))
@@ -1100,11 +1165,15 @@ class AdHocShortBPTTAgent(Agent):
         hid_1_u, hid_2_u = zip(*self.hidden_u)
         hid_u = (torch.cat(hid_1_u, dim=1), torch.cat(hid_2_u, dim=1))
 
-        if self.with_added_u:
-            return new_graphs, e_feat, n_feat, u_feat, \
+        if self.with_rgb:
+            if self.with_added_u:
+                return new_graphs, e_feat, n_feat, u_feat, \
                    hid_e, hid_n, hid_u, added_u_feats
-        return new_graphs, e_feat, n_feat, u_feat,\
+            return new_graphs, e_feat, n_feat, u_feat,\
                hid_e, hid_n, hid_u
+        else:
+            return new_graphs, e_feat, n_feat, u_feat, \
+                   hid_e, hid_n, hid_u
 
 
 
