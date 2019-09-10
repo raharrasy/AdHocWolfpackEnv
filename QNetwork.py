@@ -563,8 +563,6 @@ class MRFMessagePassingModule(nn.Module):
         return returned_values
 
 
-
-
 class AdHocWolfpackGNN(nn.Module):
     def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_mid, dim_out,
                  dim_lstm_out, act_dims, with_rfm=False):
@@ -609,6 +607,26 @@ class AdHocWolfpackGNN(nn.Module):
             out = self.q_net(graph, e_feat, n_feat, u_out, reverse_feats)
 
         return out, e_hid, n_hid, u_hid
+
+class AdHocWolfpackLSTM(nn.Module):
+    def __init__(self, dim_in_lstm, dim_out_lstm, mid1, dim_out_mlp1, mid2, dim_out_mlp2, out_dim):
+        super(AdHocWolfpackLSTM, self).__init__()
+        self.lstm = nn.LSTM(dim_in_lstm, dim_out_lstm, batch_first=True)
+        self.mlp1 = nn.Linear(dim_out_lstm, mid1)
+        self.mlp2 = nn.Linear(mid1, dim_out_mlp1)
+        self.mlp3 = nn.Linear(dim_out_mlp1, mid2)
+        self.mlp4 = nn.Linear(mid2, dim_out_mlp2)
+        self.mlp5 = nn.Linear(dim_out_mlp2, out_dim)
+
+    def forward(self, inp, hidden):
+        out, hidden = self.lstm(inp, hidden)
+        out_shape = out.shape
+        out = out.view([out_shape[0], out_shape[2]])
+        out = F.relu(self.mlp2(F.relu(self.mlp1(out))))
+        out = F.relu(self.mlp4(F.relu(self.mlp3(out))))
+        return self.mlp5(out), hidden
+
+
 
 class GraphOppoModel(nn.Module):
     def __init__(self,dim_in_node, dim_in_edge, dim_in_u, added_u, hidden_dim, hidden_dim2, dim_mid, dim_out,

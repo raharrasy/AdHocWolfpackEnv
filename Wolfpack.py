@@ -188,11 +188,14 @@ class OpenScheduler(object):
 class Wolfpack(object):
     def __init__(self, grid_height, grid_width, agent_list, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None, seed=1000):
         self.grid_height = grid_height
         self.grid_width = grid_width
         self.scheduler = scheduler
         self.agent_list = agent_list
+        self.seed=seed
+        self.randomizer = random
+        self.randomizer.seed(self.seed)
 
         self.sight_sideways = sight_sideways
         self.sight_radius = sight_radius
@@ -204,14 +207,16 @@ class Wolfpack(object):
         self.grid = [[0 for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.RGB_grid = [[[0, 0, 255] for b in range(self.grid_width)] for a in range(self.grid_height)]
         self.num_players = num_players
+        self.num_teammates = num_players
         self.max_food_num = max_food_num
         self.max_time_steps = max_time_steps
         self.food_freeze_rate = food_freeze_rate
 
-        app = Generator((self.grid_width, self.grid_height), 7, 8)
-        app.initialiseMap()
-        app.simulate(2)
-        self.levelMap = app.booleanMap
+        #app = Generator((self.grid_width, self.grid_height), 7, 8)
+        #app.initialiseMap()
+        #app.simulate(2)
+        #self.levelMap = app.booleanMap
+        self.levelMap = [[False] * k for k in [self.grid_width] * self.grid_height]
         #self.visualizer = Visualizer(self.grid, self.grid_height, self.grid_width)
 
         self.obstacleCoord = [(iy, ix) for ix, row in enumerate(self.levelMap) for iy, i in enumerate(row) if i]
@@ -226,6 +231,7 @@ class Wolfpack(object):
         self.food_points = None
         self.a_to_idx = None
         self.idx_to_a = None
+        self.prev_dist_to_food = None
 
         self.player_obs_type = []
         self.food_obs_type = []
@@ -295,6 +301,8 @@ class Wolfpack(object):
             self.RGB_grid[coord[0]][coord[1]] = [255, 0, 0]
             self.RGB_padded_grid[coord[0] + self.pads][coord[1] + self.pads] = [255, 0, 0]
 
+        self.prev_dist_to_food = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in self.player_positions]
         self.remaining_timesteps = self.max_time_steps
 
         return [self.observation_computation(obs_type, agent_id=id) for id, obs_type in
@@ -324,6 +332,9 @@ class Wolfpack(object):
                 self.food_alive_statuses[idx] = True
                 self.food_positions[idx] = coords[coord_idx]
                 coord_idx += 1
+
+        self.prev_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in self.player_positions]
 
     def update_status(self):
         for idx in range(len(self.food_alive_statuses)):
@@ -453,7 +464,13 @@ class Wolfpack(object):
         player_locations = self.player_positions
         set_of_food_location = set(food_locations)
 
-        self.player_points = [0 for a in range(self.num_players)]
+        cur_dist_to_food = [min([abs(px - fx) + abs(py - fy) for (fx, fy) in food_locations])
+                                  for (px, py) in self.player_positions]
+
+        self.player_points = [0.2 * (prev_dist-cur_dist)
+                              for prev_dist, cur_dist in zip(self.prev_dist_to_food, cur_dist_to_food)]
+        self.prev_dist_to_food = cur_dist_to_food
+
         self.food_points = [0 for a in range(self.max_food_num)]
 
         for player_loc in player_locations:
@@ -700,22 +717,63 @@ class Wolfpack(object):
 
             prob_state = np.asarray(self.RGB_grid)
 
-            return pos_list, prob_state, self.masking, self.prev_added
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
 
-        # elif obs_type == "centralized_decentralized":
+            return pos_list, prob_state, self.masking, self.prev_added, food_list
+
+        elif obs_type == "ad_hoc_obs_no_rgb":
+            orientation = self.player_orientation
+            positions = self.player_positions
+
+            pos_list = [list(pos_data) for pos_data in positions]
+            for pos, ord in zip(pos_list, orientation):
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
+
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
+
+            return pos_list, self.masking, self.prev_added, food_list
+
+        elif obs_type == "plain_constant":
+            orientation = self.player_orientation
+            positions = self.player_positions
+
+            pos_list = [list(pos_data) for pos_data in positions]
+            for pos, ord in zip(pos_list, orientation):
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
+
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
+
+            return pos_list, food_list
 
     def add_agent(self, new_agent, new_types):
         def_orientation = 0
         available_pos = list(set(self.possibleCoordinates) - set(self.player_positions) -
                              set(self.food_positions))
-        pos_idxes = random.sample(list(range(len(available_pos))), k=len(new_agent))
+        pos_idxes = self.randomizer.sample(list(range(len(available_pos))), k=len(new_agent))
         added_pos = [available_pos[a] for a in pos_idxes]
         orientation = [def_orientation for _ in range(len(added_pos))]
+        added_cur_dis = [min([abs(px-fx)+abs(py-fy) for (fx, fy) in self.food_positions])
+                                  for (px, py) in added_pos]
 
         self.player_orientation.extend(orientation)
         self.player_positions.extend(added_pos)
         self.player_obs_type.extend(new_types)
         self.agent_list.extend(new_agent)
+        self.prev_dist_to_food.extend(added_cur_dis)
+
         for a in added_pos:
             self.grid[a[0]][a[1]] = 2
             self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
@@ -733,6 +791,7 @@ class Wolfpack(object):
             self.agent_list.pop(idx)
             self.player_orientation.pop(idx)
             self.player_obs_type.pop(idx)
+            self.prev_dist_to_food.pop(idx)
             self.num_players -= 1
 
     def step(self, hunter_collective_action, food_collective_action):
@@ -766,14 +825,19 @@ class Wolfpack(object):
         self.food_obs_type = list_obs
 
     def sample_init_players(self):
-        num_sampled = random.randint(1, 4)
-        all_agent_types = [RandomAgent, GreedyPredatorAgent]
-        agent_inits = [all_agent_types[random.randint(0, len(all_agent_types) - 1)](idx + 1)
+        #num_sampled = random.randint(1, 4)
+        num_sampled = self.num_teammates
+        #all_agent_types = [GreedyPredatorAgent]
+        #all_agent_types = [GreedyProbabilisticAgent]
+        all_agent_types = [RandomAgent, GreedyPredatorAgent, GreedyProbabilisticAgent,
+                           TeammateAwarePredator, DistilledCoopAStarAgent, MADDPGAgent]
+        agent_inits = [all_agent_types[self.randomizer.randint(0, len(all_agent_types) - 1)](idx + 1)
                        for idx in range(num_sampled)]
+        #agent_inits = [RandomAgent(1), GreedyPredatorAgent(2)]
         return agent_inits
 
     #def render(self):
-    #    self.visualizer.render()
+    #  self.visualizer.render()
 
 #@ray.remote
 #def get_food(food, obs):
@@ -783,12 +847,13 @@ class Wolfpack(object):
 class AdHocWolfpack(Wolfpack):
     def __init__(self, grid_height, grid_width, agent, args= None, sight_sideways=8,
                  sight_radius=8, num_players=5, max_food_num=2, food_freeze_rate=0,
-                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None):
+                 max_time_steps=200, coop_radius=4, groupMultiplier=2, scheduler=None, seed=1000):
         self.agent = agent
         agent_list = [agent]
         Wolfpack.__init__(self, grid_height, grid_width, agent_list, sight_sideways,
                  sight_radius, num_players, max_food_num, food_freeze_rate,
-                 max_time_steps, coop_radius, groupMultiplier, scheduler)
+                 max_time_steps, coop_radius, groupMultiplier, scheduler, seed)
+
 
         self.args = args
         self.food_list = None
@@ -901,8 +966,8 @@ parser.add_argument('--obs_height', type=int,default=9,help="observation_height"
 parser.add_argument('--obs_width', type=int,default=17,help="observation_width")
 parser.add_argument('--obs_type', type=str,default="partial_obs",help="observation type")
 parser.add_argument('--with_gpu', type=bool,default=False,help="with gpu")
-parser.add_argument('--add_rate', type=float,default=0.05,help="agent added rate")
-parser.add_argument('--del_rate', type=float,default=0.05,help="agent deletion rate")
+parser.add_argument('--add_rate', type=float,default=0.00,help="agent added rate")
+parser.add_argument('--del_rate', type=float,default=0.00,help="agent deletion rate")
 parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
 parser.add_argument('--max_seq_length', type=int, default=5, help="length of state sequence")
@@ -928,7 +993,7 @@ if __name__ == '__main__':
     torch.set_num_threads(1)
     arguments = vars(args)
 
-    player = AdHocShortBPTTAgent(args=arguments, agent_id=0)
+    player = ConstantLSTMAgent(args=arguments, agent_id=0)
 
     num_episodes = arguments['num_episodes']
     eps_length = arguments['episode_length']
@@ -944,7 +1009,9 @@ if __name__ == '__main__':
         start = timeit.default_timer()
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
-        #env_obs = [env.reset() for env in envs]
+        env_obs = torch.cat([torch.cat((torch.Tensor(a[0][0]),torch.Tensor(a[0][1]),torch.Tensor(a[0][2]),
+                                        torch.Tensor(a[1])),
+                                       dim=-1)[None, :] for a in env_obs], dim=0)[:,None,:]
         player.reset(env_obs)
         done = False
         total_update_time = 0
@@ -953,6 +1020,9 @@ if __name__ == '__main__':
             player_obs = ray.get([env.step.remote(player_act) for env, player_act in zip(envs, player_acts)])
             #player_obs = [env.step(player_act) for env, player_act in zip(envs, player_acts)]
             env_obs = [obs[0] for obs in player_obs]
+            env_obs = torch.cat([torch.cat((torch.Tensor(a[0][0]), torch.Tensor(a[0][1]), torch.Tensor(a[0][2]),
+                                            torch.Tensor(a[1])),
+                                           dim=-1)[None, :] for a in env_obs], dim=0)[:, None, :]
             rewards = [obs[1] for obs in player_obs]
             dones = [obs[2] for obs in player_obs]
             player.set_next_state(env_obs, rewards, dones)

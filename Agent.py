@@ -3,7 +3,7 @@ import math
 import sys
 import queue as Q
 from ReplayMemory import ReplayMemoryLite, ReplayMemoryGraph
-from QNetwork import DQN, AdHocWolfpackGNN, GraphOppoModel, MADDPGDQN
+from QNetwork import DQN, AdHocWolfpackGNN, AdHocWolfpackLSTM, GraphOppoModel, MADDPGDQN
 from misc import hard_copy, soft_copy
 from MADDPGMisc import gumbel_softmax
 import torch
@@ -1475,3 +1475,108 @@ class AdHocDQNAgent(Agent):
             pointer += 1
 
         return torch.cat([tens[None,:] for tens in output], dim=0)
+
+class ConstantLSTMAgent(Agent):
+    def __init__(self, agent_id=0, args=None, obs_type="plain_constant", optimizer=None,
+                 mode="train", device=None, epsilon=1.0):
+        super(ConstantLSTMAgent, self).__init__(agent_id=agent_id, obs_type=obs_type)
+        self.args = args
+
+        # Initialize neural network dimensions
+        self.device = device
+        if self.device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.dqn_net = AdHocWolfpackLSTM(22, 30, 40, 15, 20, 10, 5)
+        self.dqn_net.to(self.device)
+        self.target_dqn_net = AdHocWolfpackLSTM(22, 30, 40, 15, 20, 10, 5)
+        self.target_dqn_net.to(self.device)
+        self.mode = mode
+        self.color = (255, 255, 0)
+
+
+        # Set params for Ad Hoc BPTT
+        self.optimizer = optimizer
+        if self.optimizer is None:
+            self.optimizer = optim.Adam(self.dqn_net.parameters(), lr=self.args['lr'])
+        self.target_hidden = None
+        self.hidden = None
+
+        self.obs = None
+        self.next_obs = None
+
+        # Stored data for training
+        self.predicted_vals = None
+        self.target_vals = None
+        self.epsilon = epsilon
+
+        self.loss_module = nn.MSELoss()
+
+    def step(self, obs):
+        if self.next_obs is None:
+            prepped_obs = obs
+            self.target_hidden = (torch.zeros(1,len(obs),30).to(self.device),torch.zeros(1,len(obs),30).to(self.device))
+            _, self.target_hidden = self.target_dqn_net(prepped_obs, self.target_hidden)
+
+        else:
+            prepped_obs = self.next_obs
+
+        self.obs = prepped_obs
+
+        if self.hidden is None:
+            self.hidden = (torch.zeros(1,len(obs),30).to(self.device),torch.zeros(1,len(obs),30).to(self.device))
+
+        out, self.hidden = self.dqn_net(self.obs, self.hidden)
+
+        act = torch.argmax(out, dim=-1)
+        act = [a.item() if random.random() > self.epsilon else
+               random.randint(0, 4) for a in act]
+        self.predicted_vals.append(out.gather(1, torch.Tensor(act).long().to(self.device)[:, None]))
+        return act
+
+    def set_next_state(self, next_obs, rewards, dones):
+        # Set all necessary data for next forward computation
+        self.next_obs = next_obs
+
+        # Compute target values
+        # Initialize target values
+        targ_out, self.target_hidden = self.target_dqn_net(next_obs,self.target_hidden)
+        targs = torch.max(targ_out, dim=-1)[0][:,None]
+        rewards = torch.Tensor(rewards)[:,None].to(self.device)
+        dones = torch.Tensor(dones)[:,None].to(self.device)
+
+        targs = rewards + self.args['disc_rate'] * (1-dones) * targs
+        self.target_vals.append(targs)
+
+    def reset(self, obs):
+        self.obs = None
+        self.next_obs = None
+
+        self.target_hidden = None
+        self.hidden = None
+
+        self.predicted_vals = []
+        self.target_vals = []
+
+    def load_parameters(self, filename):
+        self.dqn_net.load_state_dict(torch.load(filename))
+        self.dqn_net.eval()
+
+    def save_parameters(self, filename):
+        torch.save(self.dqn_net.state_dict(), filename)
+
+    def set_epsilon(self, eps):
+        self.epsilon = eps
+
+    def update(self):
+        self.optimizer.zero_grad()
+        pred_tensor = torch.cat(self.predicted_vals, dim = 0)
+        target_tensor = torch.cat(self.target_vals, dim = 0)
+        loss = self.loss_module(pred_tensor, target_tensor.detach())
+        loss.backward()
+        self.optimizer.step()
+
+        soft_copy(self.target_dqn_net, self.dqn_net, self.args['tau'])
+        self.predicted_vals = []
+        self.target_vals = []
+
+        self.hidden = (self.hidden[0].detach(), self.hidden[1].detach())
