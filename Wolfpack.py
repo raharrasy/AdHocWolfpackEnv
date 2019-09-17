@@ -215,6 +215,8 @@ class Wolfpack(object):
         self.max_time_steps = max_time_steps
         self.food_freeze_rate = food_freeze_rate
 
+        self.other_player_acts = None
+
         #app = Generator((self.grid_width, self.grid_height), 7, 8)
         #app.initialiseMap()
         #app.simulate(2)
@@ -265,6 +267,7 @@ class Wolfpack(object):
         self.agent_list = agent_list
         self.player_obs_type = [a.obs_type for a in self.agent_list]
         self.num_players = len(self.agent_list)
+        self.other_player_acts = None
         if not self.scheduler is None:
             self.scheduler.available_agents = self.num_players - 1
             self.prev_added = 0
@@ -614,6 +617,7 @@ class Wolfpack(object):
     #     self.update_food_status()
 
     def update_state(self, hunter_collective_action, food_collective_action):
+        self.other_player_acts = hunter_collective_action
         self.remaining_timesteps -= 1
         self.update_status()
         self.revive()
@@ -854,6 +858,29 @@ class Wolfpack(object):
 
             return pos_list, self.masking, self.prev_added, food_list
 
+        elif obs_type == "ad_hoc_oppo_mod":
+            orientation = self.player_orientation
+            positions = self.player_positions
+
+            pos_list = [list(pos_data) for pos_data in positions]
+            for pos, ord in zip(pos_list, orientation):
+                orients = [0] * 4
+                orients[ord] = 1
+                pos.extend(orients)
+
+            oppo_positions = self.food_positions
+            food_list = []
+            for a in oppo_positions:
+                food_list.extend(list(a))
+
+            if self.other_player_acts == None :
+                other_player_acts = [None] * (len(pos_list)-1)
+            else:
+                other_player_acts = self.other_player_acts[1:]
+
+            return pos_list, self.masking, self.prev_added, food_list, other_player_acts
+
+
         # elif obs_type == "centralized_decentralized":
 
     def add_agent(self, new_agent, new_types):
@@ -1051,11 +1078,11 @@ parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 parser.add_argument('--disc_rate', type=float, default=0.99, help='dicount_rate')
 parser.add_argument('--num_predators', type=int, default=2, help='number of predators')
 parser.add_argument('--num_food', type=int, default=2, help='number of preys')
-parser.add_argument('--num_episodes', type=int, default=800, help="Number of episodes for training")
+parser.add_argument('--num_episodes', type=int, default=1600, help="Number of episodes for training")
 parser.add_argument('--update_frequency', type=int, default=10, help="Timesteps between updates")
 parser.add_argument('--episode_length', type=int, default=200, help="Number of timesteps in episode")
 parser.add_argument('--sampling_wait_time', type=int, default=100, help="timesteps until begin updating")
-parser.add_argument('--saving_frequency', type=int,default=40,help="saving frequency")
+parser.add_argument('--saving_frequency', type=int,default=80,help="saving frequency")
 parser.add_argument('--obs_height', type=int,default=9,help="observation_height")
 parser.add_argument('--obs_width', type=int,default=17,help="observation_width")
 parser.add_argument('--obs_type', type=str,default="partial_obs",help="observation type")
@@ -1064,6 +1091,7 @@ parser.add_argument('--add_rate', type=float,default=0.00,help="agent added rate
 parser.add_argument('--del_rate', type=float,default=0.00,help="agent deletion rate")
 parser.add_argument('--num_envs', type=int,default=16, help="Number of environments")
 parser.add_argument('--tau', type=float,default=0.001, help="tau")
+parser.add_argument('--weight_predict', type=float,default=0.001, help="tau")
 parser.add_argument('--max_seq_length', type=int, default=5, help="length of state sequence")
 parser.add_argument('--maddpg_max_seq_length', type=int, default=10, help="length of state sequence")
 
@@ -1108,9 +1136,9 @@ if __name__ == '__main__':
     torch.set_num_threads(1)
 
     ray.init(object_store_memory=int(1e9))
-    #os.system("ray start --head --redis-port 8989 --object-store-memory 1000000000")
+    #os.system("ray start --head --redis-port 25989 --object-store-memory 1000000000")
     #time.sleep(1)
-    #ray.init(redis_address=str(machine_ip) + ":8989")
+    #ray.init(redis_address=str(machine_ip) + ":25989")
     envs = create_parallel_env(vars(args), player, arguments['num_envs'])
     # Setup
 
@@ -1121,7 +1149,7 @@ if __name__ == '__main__':
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
         player.reset(env_obs)
-        player.set_epsilon(max(1.0-((eps_index+1.0)/600.0), 0.05))
+        player.set_epsilon(max(1.0-((eps_index+1.0)/1200.0), 0.05))
         #player.set_epsilon(0.0)
         done = False
         total_rewards = 0.0

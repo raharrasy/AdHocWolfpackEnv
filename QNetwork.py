@@ -593,11 +593,17 @@ class AdHocWolfpackGNN(nn.Module):
 
 class AdHocWolfpackGNNLSTMFirst(nn.Module):
     def __init__(self, dim_in_node, dim_in_edge, dim_in_u, hidden_dim, hidden_dim2, dim_lstm_out, dim_mid, dim_out,
-                 fin_mid_dim, act_dims, with_added_u_feat=False, added_u_feat_dim=0,
-                 with_rfm=False, with_rgb=False):
+                 fin_mid_dim, act_dims, other_agent_dims=7, with_added_u_feat=False, added_u_feat_dim=0,
+                 with_oppo_modeling=False, with_rfm=False, with_rgb=False):
         super(AdHocWolfpackGNNLSTMFirst, self).__init__()
         self.dim_lstm_out = dim_lstm_out
         self.with_rgb = with_rgb
+        self.with_oppo_modeling = with_oppo_modeling
+
+        if self.with_oppo_modeling:
+            self.pre_act_pred_model = nn.Linear(dim_out, fin_mid_dim)
+            self.act_pred_model = nn.Linear(fin_mid_dim, other_agent_dims)
+
         if self.with_rgb:
             self.MapCNN = MapProcessor(25,25, dim_in_u)
         self.with_added_u_feat = with_added_u_feat
@@ -647,22 +653,29 @@ class AdHocWolfpackGNNLSTMFirst(nn.Module):
                                                                                updated_e_feat, updated_n_feat,
                                                                                updated_u_feat)
 
-        #inp = updated_u_feat
         zero_indexes = [0]
-        #print(graph.batch_num_nodes)
         for a in range(len(graph.batch_num_nodes)-1):
             zero_indexes.append(zero_indexes[a] + graph.batch_num_nodes[a])
 
-        #print(zero_indexes)
         inp = updated_n_feat[zero_indexes]
 
+        if self.with_oppo_modeling:
+            non_zero_indexes = [a for a in range(graph.number_of_nodes()) if not a in zero_indexes]
+            action_pred_inp = updated_n_feat[non_zero_indexes]
+
         if not self.with_rfm:
-            #print("Fin relu out : ",F.relu(self.pre_q_net(inp)))
             out = self.q_net(F.relu(self.pre_q_net(inp)))
+            if self.with_oppo_modeling:
+                action_modeling_res = self.act_pred_model(F.relu(self.pre_act_pred_model(
+                    action_pred_inp)))
+
         else:
             edges = graph.edges()
             reverse_feats = e_feat[graph.edge_ids(edges[1],edges[0])]
             out = self.q_net(graph, e_feat, n_feat, u_out, reverse_feats)
+
+        if self.with_oppo_modeling:
+            return out, e_hid, n_hid, u_hid, action_modeling_res
         return out, e_hid, n_hid, u_hid
 
 class GraphOppoModel(nn.Module):
