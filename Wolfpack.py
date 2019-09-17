@@ -498,6 +498,121 @@ class Wolfpack(object):
                 self.RGB_padded_grid[self.food_positions[idx][0] + self.pads][self.food_positions[idx][1] + self.pads] \
                     = [255, 0, 0]
 
+    # def update_state(self, hunter_collective_action, food_collective_action):
+    #     self.remaining_timesteps -= 1
+    #     self.update_status()
+    #     self.revive()
+    #
+    #     prev_player_position = self.player_positions
+    #     prev_player_orientation = self.player_orientation
+    #     prev_food_position = self.food_positions
+    #     prev_food_orientation = self.food_orientation
+    #
+    #     update_results = self.calculate_new_position(hunter_collective_action, prev_player_position,
+    #                                                  prev_player_orientation)
+    #     post_player_position = [(a, b) for (a, b, c) in update_results]
+    #     post_player_orientation = [c for (a, b, c) in update_results]
+    #     self.player_orientation = post_player_orientation
+    #
+    #     update_results = self.calculate_new_position(food_collective_action, prev_food_position, prev_food_orientation)
+    #     post_food_position = [(a, b) for (a, b, c) in update_results]
+    #     post_food_orientation = [c for (a, b, c) in update_results]
+    #     self.food_orientation = post_food_orientation
+    #
+    #     prev_positions = [None] * (len(prev_player_position) + len(prev_food_position))
+    #     post_positions = [None] * (len(prev_player_position) + len(prev_food_position))
+    #     types = [None]
+    #     food_status = [False] * (len(prev_player_position) + len(prev_food_position))
+    #
+    #     for a in range(len(prev_player_position)):
+    #         prev_positions[a] = prev_player_position[a]
+    #         post_positions[a] = post_player_position[a]
+    #         types[a] = "player"
+    #
+    #     for a in range(len(prev_food_position)):
+    #         prev_positions[a+len(prev_player_position)] = prev_food_position[a]
+    #         post_positions[a+len(post_player_position)] = post_food_position[a]
+    #         types[a+len(post_player_position)] = "food"
+    #         if self.food_alive_statuses[a]:
+    #             food_status[a+len(post_player_position)] = True
+    #
+    #     # Calculate player intersection
+    #     a, seen, result = post_positions, {}, {}
+    #     for idx, item in enumerate(a):
+    #         next_pass = True
+    #         if types[idx] == "food" and not food_status[idx]:
+    #             next_pass = False
+    #
+    #         if next_pass:
+    #             if item not in seen:
+    #                 result[item] = [idx]
+    #                 seen[item] = types[idx]
+    #             else:
+    #                 if types[idx] == "food":
+    #                     if seen[item] == "food":
+    #                         result[item].append(idx)
+    #                     else:
+    #                         close = [x for x in a[:len(post_player_position)] if abs(item[0] - x[0]) +
+    #                                  abs(item[1] - x[1]) <= self.coopRadius]
+    #                         if not len(close) > 1:
+    #                             result[item].append(idx)
+    #
+    #     groupings = list(result.values())
+    #     doubles = [t for t in groupings if len(t) > 1]
+    #     while len(doubles) > 0:
+    #         res = set([item for sublist in doubles for item in sublist])
+    #         for ii in range(len(self.player_positions)):
+    #             if ii in res:
+    #                 post_positions[ii] = prev_positions[ii]
+    #
+    #         a, seen, result = post_positions, {}, {}
+    #         for idx, item in enumerate(a):
+    #             next_pass = True
+    #             if types[idx] == "food" and not food_status[idx]:
+    #                 next_pass = False
+    #
+    #             if next_pass:
+    #                 if item not in seen:
+    #                     result[item] = [idx]
+    #                     seen[item] = types[idx]
+    #                 else:
+    #                     if types[idx] == "food":
+    #                         if seen[item] == "food":
+    #                             result[item].append(idx)
+    #                         else:
+    #                             close = [x for x in a[:len(post_player_position)] if abs(item[0] - x[0]) +
+    #                                      abs(item[1] - x[1]) <= self.coopRadius]
+    #                             if not len(close) > 1:
+    #                                 result[item].append(idx)
+    #
+    #         groupings = list(result.values())
+    #         doubles = [t for t in groupings if len(t) > 1]
+    #
+    #     for a in self.player_positions:
+    #         self.grid[a[0]][a[1]] = 1
+    #         self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+    #         self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
+    #     self.player_positions = post_positions[:len(post_player_position)]
+    #
+    #     for a in self.player_positions:
+    #         self.grid[a[0]][a[1]] = 2
+    #         self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
+    #         self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 255, 255]
+    #
+    #     for a in self.food_positions:
+    #         self.grid[a[0]][a[1]] = 1
+    #         self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+    #         self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
+    #     self.food_positions = post_positions[len(post_player_position):]
+    #
+    #     for idx, a in enumerate(self.food_positions):
+    #         if self.food_alive_statuses[idx]:
+    #             self.grid[a[0]][a[1]] = 3
+    #             self.RGB_grid[a[0]][a[1]] = [255, 0, 0]
+    #             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 0, 0]
+    #
+    #     self.update_food_status()
+
     def update_state(self, hunter_collective_action, food_collective_action):
         self.remaining_timesteps -= 1
         self.update_status()
@@ -508,20 +623,20 @@ class Wolfpack(object):
         prev_food_position = self.food_positions
         prev_food_orientation = self.food_orientation
 
-        update_results = self.calculate_new_position(hunter_collective_action, prev_player_position,
+        update_results_player = self.calculate_new_position(hunter_collective_action, prev_player_position,
                                                      prev_player_orientation)
-        post_player_position = [(a, b) for (a, b, c) in update_results]
-        post_player_orientation = [c for (a, b, c) in update_results]
+        post_player_position = [(a, b) for (a, b, c) in update_results_player]
+        post_player_orientation = [c for (a, b, c) in update_results_player]
         self.player_orientation = post_player_orientation
 
-        update_results = self.calculate_new_position(food_collective_action, prev_food_position, prev_food_orientation)
-        post_food_position = [(a, b) for (a, b, c) in update_results]
-        post_food_orientation = [c for (a, b, c) in update_results]
+        update_results_food = self.calculate_new_position(food_collective_action, prev_food_position, prev_food_orientation)
+        post_food_position = [(a, b) for (a, b, c) in update_results_food]
+        post_food_orientation = [c for (a, b, c) in update_results_food]
         self.food_orientation = post_food_orientation
 
         prev_positions = [None] * (len(prev_player_position) + len(prev_food_position))
         post_positions = [None] * (len(prev_player_position) + len(prev_food_position))
-        types = [None]
+        types = [None] * (len(prev_player_position) + len(prev_food_position))
         food_status = [False] * (len(prev_player_position) + len(prev_food_position))
 
         for a in range(len(prev_player_position)):
@@ -530,11 +645,11 @@ class Wolfpack(object):
             types[a] = "player"
 
         for a in range(len(prev_food_position)):
-            prev_positions[a+len(prev_player_position)] = prev_food_position[a]
-            post_positions[a+len(post_player_position)] = post_food_position[a]
-            types[a+len(post_player_position)] = "food"
+            prev_positions[a + len(prev_player_position)] = prev_food_position[a]
+            post_positions[a + len(post_player_position)] = post_food_position[a]
+            types[a + len(post_player_position)] = "food"
             if self.food_alive_statuses[a]:
-                food_status[a+len(post_player_position)] = True
+                food_status[a + len(post_player_position)] = True
 
         # Calculate player intersection
         a, seen, result = post_positions, {}, {}
@@ -556,12 +671,14 @@ class Wolfpack(object):
                                      abs(item[1] - x[1]) <= self.coopRadius]
                             if not len(close) > 1:
                                 result[item].append(idx)
+                    else:
+                        result[item].append(idx)
 
         groupings = list(result.values())
         doubles = [t for t in groupings if len(t) > 1]
         while len(doubles) > 0:
             res = set([item for sublist in doubles for item in sublist])
-            for ii in range(len(self.player_positions)):
+            for ii in range(len(post_positions)):
                 if ii in res:
                     post_positions[ii] = prev_positions[ii]
 
@@ -584,24 +701,16 @@ class Wolfpack(object):
                                          abs(item[1] - x[1]) <= self.coopRadius]
                                 if not len(close) > 1:
                                     result[item].append(idx)
+                        else:
+                            result[item].append(idx)
 
             groupings = list(result.values())
             doubles = [t for t in groupings if len(t) > 1]
 
-        for a in self.player_positions:
-            self.grid[a[0]][a[1]] = 1
-            self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
-            self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
-        self.player_positions = post_positions[:len(post_player_position)]
-
-        for a in self.player_positions:
-            self.grid[a[0]][a[1]] = 2
-            self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
-            self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 255, 255]
-
         for a in self.food_positions:
             self.grid[a[0]][a[1]] = 1
             self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+            #self.coloured_agent_grid[a[0]][a[1]] = [0, 0, 0]
             self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
         self.food_positions = post_positions[len(post_player_position):]
 
@@ -609,7 +718,21 @@ class Wolfpack(object):
             if self.food_alive_statuses[idx]:
                 self.grid[a[0]][a[1]] = 3
                 self.RGB_grid[a[0]][a[1]] = [255, 0, 0]
+                #self.coloured_agent_grid[a[0]][a[1]] = [255, 0, 0]
                 self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 0, 0]
+
+        for a in self.player_positions:
+            self.grid[a[0]][a[1]] = 1
+            self.RGB_grid[a[0]][a[1]] = [0, 0, 0]
+            #self.coloured_agent_grid[a[0]][a[1]] = [0, 0, 0]
+            self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [0, 0, 0]
+        self.player_positions = post_positions[:len(post_player_position)]
+
+        for idx, a in enumerate(self.player_positions):
+            self.grid[a[0]][a[1]] = 2
+            self.RGB_grid[a[0]][a[1]] = [255, 255, 255]
+            #self.coloured_agent_grid[a[0]][a[1]] = list(self.agent_list[idx].color)
+            self.RGB_padded_grid[a[0] + self.pads][a[1] + self.pads] = [255, 255, 255]
 
         self.update_food_status()
 
