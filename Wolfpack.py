@@ -814,14 +814,15 @@ class Wolfpack(object):
 
     def sample_init_players(self):
         #num_sampled = random.randint(1, 4)
-        num_sampled = self.num_teammates
+        #num_sampled = self.num_teammates
         #all_agent_types = [RandomAgent, GreedyPredatorAgent]
         #all_agent_types = [GreedyProbabilisticAgent]
-        all_agent_types = [RandomAgent, GreedyPredatorAgent, GreedyProbabilisticAgent,
-                           TeammateAwarePredator, DistilledCoopAStarAgent, MADDPGAgent]
-        agent_inits = [all_agent_types[self.randomizer.randint(0, len(all_agent_types) - 1)](idx + 1)
-                       for idx in range(num_sampled)]
-        #agent_inits = [RandomAgent(1), GreedyProbabilisticAgent(2)]
+        #all_agent_types = [RandomAgent, GreedyPredatorAgent, GreedyProbabilisticAgent,
+        #                   TeammateAwarePredator, DistilledCoopAStarAgent, MADDPGAgent]
+        #all_agent_types = []
+        #agent_inits = [all_agent_types[self.randomizer.randint(0, len(all_agent_types) - 1)](idx + 1)
+        #               for idx in range(num_sampled)]
+        agent_inits = [GreedyPredatorAgent(1), DistilledCoopAStarAgent(2)]
         return agent_inits
 
     #def render(self):
@@ -990,7 +991,7 @@ if __name__ == '__main__':
     machine_ip = get_ip()
 
     player = AdHocShortBPTTAgent(args=arguments, agent_id=0, with_added_u=True, added_u_dim=4)
-    #player.load_parameters("paramsAdhoc/params_20")
+    player.load_parameters("params_20")
     #player = GreedyPredatorAgent(agent_id=0)
 
     num_episodes = arguments['num_episodes']
@@ -1010,9 +1011,11 @@ if __name__ == '__main__':
         start = timeit.default_timer()
         num_timesteps = 0
         env_obs = ray.get([env.reset.remote() for env in envs])
+        print(env_obs)
+        exit()
         player.reset(env_obs)
-        player.set_epsilon(max(1.0-((eps_index+1.0)/600.0), 0.05))
-        #player.set_epsilon(0.0)
+        #player.set_epsilon(max(1.0-((eps_index+1.0)/600.0), 0.05))
+        player.set_epsilon(0.0)
         done = False
         total_rewards = 0.0
         while not done:
@@ -1028,13 +1031,13 @@ if __name__ == '__main__':
 
             done = dones[0]
             num_timesteps += 1
-            if num_timesteps % 10 == 0 or done:
-                player.update()
+            #if num_timesteps % 10 == 0 or done:
+            #    player.update()
 
         end = timeit.default_timer()
         print("Eps Done!!! Took these seconds : ", end-start, " with total rewards : ", total_rewards)
-        if (eps_index+1)%arguments['saving_frequency'] == 0:
-            player.save_parameters("paramsAdhoc/params_"+str((eps_index+1)//arguments['saving_frequency']))
+        #if (eps_index+1)%arguments['saving_frequency'] == 0:
+        #    player.save_parameters("paramsAdhoc/params_"+str((eps_index+1)//arguments['saving_frequency']))
 
 # if __name__ == "__main__":
 #     num_players = 8
