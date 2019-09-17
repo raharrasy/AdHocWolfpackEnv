@@ -543,8 +543,6 @@ class Wolfpack(object):
             if self.food_alive_statuses[a]:
                 food_status[a + len(post_player_position)] = True
 
-        print(post_positions, types)
-
         # Calculate player intersection
         a, seen, result = post_positions, {}, {}
         for idx, item in enumerate(a):
@@ -572,7 +570,7 @@ class Wolfpack(object):
         doubles = [t for t in groupings if len(t) > 1]
         while len(doubles) > 0:
             res = set([item for sublist in doubles for item in sublist])
-            for ii in range(len(self.player_positions)):
+            for ii in range(len(post_positions)):
                 if ii in res:
                     post_positions[ii] = prev_positions[ii]
 
@@ -821,7 +819,7 @@ class Wolfpack(object):
         self.food_obs_type = list_obs
 
     def sample_init_players(self):
-        num_sampled = random.randint(1, 4)
+        num_sampled = random.randint(7, 8)
         all_agent_types = [GreedyPredatorAgent]
         agent_inits = [all_agent_types[random.randint(0, len(all_agent_types) - 1)](idx + 1)
                        for idx in range(num_sampled)]
@@ -1020,6 +1018,7 @@ if __name__ == '__main__':
             env.render()
             next_obs = [player_obs[0]]
             rewards = [player_obs[1]]
+            print(rewards)
             dones = [player_obs[2]]
 
             player.set_next_state(next_obs, rewards, dones)
